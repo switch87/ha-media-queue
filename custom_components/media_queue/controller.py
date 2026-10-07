@@ -53,11 +53,12 @@ RESTART_WINDOW = 15.0
 # Items that fail in a row before automatic advancing gives up.
 MAX_SKIPS = 3
 
+# "standby" is deprecated in HA but still reported by older integrations.
 _STOPPED_STATES = {
     MediaPlayerState.IDLE,
     MediaPlayerState.OFF,
     MediaPlayerState.ON,
-    MediaPlayerState.STANDBY,
+    "standby",
 }
 
 

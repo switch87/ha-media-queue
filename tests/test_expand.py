@@ -34,6 +34,7 @@ async def library(hass: HomeAssistant, tmp_path: Path) -> Path:
         album / "02 Archangels Thunderbird.mp3",
         album / "01 Soap Shop Rock.mp3",
         album / "cover.jpg",
+        album / "Yeti.m3u",
         album / "CD 2" / "01 Sandoz in the Rain.flac",
         tmp_path / "Empty" / ".keep",
     ):

@@ -25,6 +25,14 @@ _LOGGER = logging.getLogger(__name__)
 # artist/album/disc trees, bounded for sources with endless trees (radio lists).
 MAX_DEPTH = 8
 MAX_BROWSE_CALLS = 200
+# Playlist files are listed as audio by the media source but are no tracks;
+# inside a folder they are skipped (like cover images).
+PLAYLIST_TYPES = {
+    "application/vnd.apple.mpegurl",
+    "audio/mpegurl",
+    "audio/x-mpegurl",
+    "audio/x-scpls",
+}
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -116,7 +124,7 @@ class _Walker:
     async def add(self, item: BrowseMedia, *, depth: int, top: bool = False) -> None:
         """Add item, or what is below it, to the result."""
         if not item.can_expand:
-            if item.can_play and (top or item.media_class != MediaClass.IMAGE):
+            if item.can_play and (top or _is_track(item)):
                 self._append(item)
             return
         before = len(self.result.items)
@@ -152,6 +160,14 @@ class _Walker:
                 thumbnail=item.thumbnail,
             )
         )
+
+
+def _is_track(item: BrowseMedia) -> bool:
+    """Return whether a playable item in a folder belongs in the queue."""
+    return (
+        item.media_class != MediaClass.IMAGE
+        and item.media_content_type not in PLAYLIST_TYPES
+    )
 
 
 def _leaf(request: AddRequest) -> QueueItem:
