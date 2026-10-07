@@ -34,4 +34,9 @@ async def async_get_config_entry_diagnostics(
             },
             TO_REDACT,
         )
-    return {"queues": queues}
+    library = manager.library
+    # Counts only: playlist names are the user's own words.
+    return {
+        "queues": queues,
+        "playlists": {"count": library.count, "items": library.item_count},
+    }

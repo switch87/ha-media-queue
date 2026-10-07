@@ -29,6 +29,7 @@ async def test_diagnostics(
     controller.fingerprint = "http://ha/media/a.mp3?authSig=secret"
     controller.set_repeat(Repeat.ALL)
     entry.runtime_data.controller("media_player.kitchen")
+    entry.runtime_data.library.save("Private name", [track("a")], overwrite=False)
 
     diagnostics = await get_diagnostics_for_config_entry(hass, hass_client, entry)
 
@@ -52,5 +53,6 @@ async def test_diagnostics(
                 "phase": "idle",
                 "fingerprint": None,
             },
-        }
+        },
+        "playlists": {"count": 1, "items": 1},
     }

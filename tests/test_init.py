@@ -11,6 +11,7 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 from pytest_homeassistant_custom_component.typing import ClientSessionGenerator
 
 from custom_components.media_queue.const import DOMAIN, STORAGE_KEY
+from custom_components.media_queue.library import PLAYLIST_STORAGE_KEY
 from custom_components.media_queue.manager import QueueManager
 from custom_components.media_queue.model import Mode
 
@@ -109,6 +110,8 @@ async def test_removing_the_entry_deletes_the_queues(
     controller = entry.runtime_data.controller(PLAYER)
     controller.queue.add([track("a")], Mode.ADD, limit=10)
     controller.async_changed()
+    entry.runtime_data.library.save("Mix", [track("a")], overwrite=False)
     assert await hass.config_entries.async_remove(entry.entry_id)
     await hass.async_block_till_done()
     assert STORAGE_KEY not in hass_storage
+    assert PLAYLIST_STORAGE_KEY not in hass_storage
