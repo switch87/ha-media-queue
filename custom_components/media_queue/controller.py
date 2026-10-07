@@ -323,10 +323,8 @@ class QueueController:
         finally:
             self._calling = False
         state = self.hass.states.get(self.entity_id)
-        if (
-            state is not None
-            and state.state == MediaPlayerState.PLAYING
-            and (self._before_state != MediaPlayerState.PLAYING or self._is_new(state))
+        if state is not None and self._shows_new_item(
+            state, self._before_state != MediaPlayerState.PLAYING
         ):
             self._arm(state)
         else:
@@ -414,10 +412,8 @@ class QueueController:
         if new is None or self._calling:
             return
         if self.phase is Phase.STARTING:
-            if new.state == MediaPlayerState.PLAYING and (
-                old is None
-                or old.state != MediaPlayerState.PLAYING
-                or self._is_new(new)
+            if self._shows_new_item(
+                new, old is None or old.state != MediaPlayerState.PLAYING
             ):
                 self._arm(new)
         elif self.phase is Phase.PLAYING:
@@ -472,6 +468,19 @@ class QueueController:
         elif updated is not None:
             position += (at - updated).total_seconds()
         return position >= duration - END_TOLERANCE
+
+    def _shows_new_item(self, state: State, started_playing: bool) -> bool:
+        """Return whether a state shows the item we just asked for, playing.
+
+        The content (or a restarted position) must differ from before our
+        call; only players that never report a content id are taken at their
+        word when they start playing.
+        """
+        if state.state != MediaPlayerState.PLAYING:
+            return False
+        if self._before_id is None and started_playing:
+            return True
+        return self._is_new(state)
 
     def _is_new(self, state: State) -> bool:
         """Return whether a playing state shows the item we just started."""

@@ -749,3 +749,39 @@ async def test_position_from_before_our_play_is_ignored(
     assert len(log.calls) == 1
     assert _phase(manager.controller(PLAYER)) is Phase.STOPPED
     await manager.async_unload()
+
+
+async def test_old_content_after_a_transition_does_not_arm(
+    hass: HomeAssistant, log: PlayerLog, freezer: FrozenDateTimeFactory
+) -> None:
+    """Idle → playing with the previous item's id (and old position) is not ours."""
+    manager = await _started(hass, "a", "b")
+    controller = manager.controller(PLAYER)
+    log.on_play = lambda call: keep(hass, "idle")  # the old item stops first
+    freezer.tick(timedelta(seconds=50))
+    await controller.async_play(1)
+    assert _phase(controller) is Phase.STARTING
+
+    keep(hass, "playing")  # the old item resumes, same id, old timestamp
+    await hass.async_block_till_done()
+    assert _phase(controller) is Phase.STARTING
+
+    playing(hass, "id-b")
+    await hass.async_block_till_done()
+    assert _phase(controller) is Phase.PLAYING
+    await manager.async_unload()
+
+
+async def test_players_without_content_id_arm_on_the_transition(
+    hass: HomeAssistant, log: PlayerLog
+) -> None:
+    """Without any content id, a transition into playing is the only sign."""
+    log.on_play = lambda call: None
+    manager = await async_manager_with(hass, "a")
+    controller = manager.controller(PLAYER)
+    await controller.async_play(0)
+    assert _phase(controller) is Phase.STARTING
+    state(hass, "playing", media_duration=DURATION)
+    await hass.async_block_till_done()
+    assert _phase(controller) is Phase.PLAYING
+    await manager.async_unload()
