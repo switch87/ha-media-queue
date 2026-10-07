@@ -76,11 +76,13 @@ const REPEAT = {
   one: { icon: "mdi:repeat-once", next: "off" },
 };
 
-/** Return the repeat button; a click cycles off → all → one → off. */
+/**
+ * Return the repeat button; a click cycles off → all → one → off. It has three
+ * states, so it is no toggle: its name (title key) says the state.
+ */
 export function repeatButton(snapshot) {
   const mode = REPEAT[snapshot?.repeat] ? snapshot.repeat : "off";
   return {
-    pressed: mode !== "off",
     icon: REPEAT[mode].icon,
     title: `repeat_${mode}`,
     value: REPEAT[mode].next,

@@ -42,7 +42,7 @@ const STYLE = `
   .now .s { color: var(--secondary-text-color); font-size: 0.9em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .now .main { background: var(--primary-color); color: var(--text-primary-color, white); padding: 10px; }
   .now .mode { color: var(--secondary-text-color); }
-  .now .mode[aria-pressed="true"] { color: var(--primary-color); }
+  .now .mode.on { color: var(--primary-color); }
   .now input[type=range] { width: 120px; accent-color: var(--primary-color); }
   .narrow .now { flex-wrap: wrap; row-gap: 4px; }
   .narrow .now .info { flex: 1 1 calc(100% - 64px); }
@@ -613,7 +613,7 @@ class MediaQueuePanel extends HTMLElement {
       h(
         "button",
         {
-          class: "mode",
+          class: shuffle.pressed ? "mode on" : "mode",
           title: this.t(shuffle.title),
           "aria-label": this.t("shuffle"),
           "aria-pressed": String(shuffle.pressed),
@@ -656,10 +656,9 @@ class MediaQueuePanel extends HTMLElement {
       h(
         "button",
         {
-          class: "mode",
+          class: repeat.value === "all" ? "mode" : "mode on",
           title: this.t(repeat.title),
           "aria-label": this.t(repeat.title),
-          "aria-pressed": String(repeat.pressed),
           disabled: !this._entityId,
           onclick: () => this._call({ type: "media_queue/set_repeat", repeat: repeat.value }),
         },
