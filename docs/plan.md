@@ -276,3 +276,63 @@ flagged frames give no titles; the duration from mutagen's `MPEGInfo` after
 the tag), and gives every other file to mutagen through a reader that stops at
 256 kB (over it: file name). Reads use an 8 kB buffer. Measured: 16 kB for a
 FLAC or MP3 with a 5 MB cover, 25 kB for an MP3 without.
+
+---
+
+# Addendum: 0.3.0 — a playlist library
+
+Gert: "een wachtrij zou als een playlist moeten opgeslagen kunnen worden, in
+een lokale library van playlists die voor alle players beschikbaar is".
+
+## Design decisions
+
+- **One library for the whole installation** (`library.py`,
+  `PlaylistLibrary`), own Store `media_queue.playlists` (version 1.1, delayed
+  save 5 s, flushed at unload; tolerant loading: malformed playlists and
+  items are dropped). A playlist: `id`, `name` (trimmed, 1–100 characters,
+  unique without regard to case), `items` (the queue items as they are:
+  media id, type, title, artist, album, duration, thumbnail, media class —
+  any source), `created`, `updated` (ISO timestamps). At most 1000 items per
+  playlist (a queue holds no more) and 500 playlists.
+- **Saving** takes a player's queue in its shown (play) order; an existing
+  name is refused unless `overwrite` (the panel asks first). Rename keeps the
+  id; a name taken by another playlist is refused (overwrite is not offered
+  for renames: delete the other one first).
+- **Loading** puts copies of the items (new item ids) into a player's queue
+  with the usual modes (replace/add/next/play) and the usual shuffle/repeat
+  rules; one track of a playlist can be loaded on its own (`item_id`). No
+  browsing or expansion is needed; items without a duration get their tags
+  read like any local item.
+- **Permissions**: list/get need nothing beyond a logged-in user (the page is
+  for every user). Save needs control of the player whose queue is saved;
+  load needs control of the target player; rename and delete need an admin
+  or a user who may control at least one media player.
+- **API**: websocket `media_queue/playlists/{list,get,save,rename,delete,load}`
+  (playlists by id); actions `media_queue.save_playlist`, `load_playlist`,
+  `rename_playlist`, `delete_playlist`, `get_playlists` (by name, for
+  automations).
+- **Media source** `media-source://media_queue` ("Afspeellijsten (Muziek)"):
+  HA's own media browser shows the playlists for every player; a playlist
+  opens to its tracks, each playable with its original media id. The
+  playlist itself is not playable there (HA's browser plays one item); the
+  whole playlist is loaded from the Muziek page or the action. The Muziek
+  page hides this source in its own library (it has a better folder for it).
+- **Panel**: a "Save as playlist" button in the queue header (inline dialog
+  for the name; an existing name asks to overwrite); a "Playlists" folder at
+  the top of the library for every player: ▶ ⏭ ➕ per playlist and per track,
+  open, rename, delete (confirmed). The list is fetched when the folder is
+  opened (no live subscription).
+- Removing the integration deletes the playlists too (like the queues).
+- Diagnostics: number of playlists and of items only (no names).
+
+## Tasks 0.3.0
+
+24. `library.py`: model, validation, limits, Store, tolerant loading.
+25. Manager owns the library; controller loads playlist items into a queue.
+26. Websocket commands with permissions.
+27. Actions, strings, icons.
+28. Media source platform.
+29. Diagnostics, removal deletes the playlists.
+30. Frontend logic (`lib/playlists.js`, strings).
+31. Panel: save dialog, playlists folder, rename/delete.
+32. Release docs 0.3.0; e2e with screenshots (nl).
