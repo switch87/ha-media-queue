@@ -31,6 +31,10 @@
 ### Changed
 
 - Removing the integration also deletes the saved playlists.
+- The sidebar entry follows the installation's language: "Music", "Muziek"
+  on Dutch installations (it was always "Muziek").
+- Packaged for HACS: MIT licence, `hacs.json`, validation (HACS, hassfest)
+  and CI workflows; README rewritten for new users; CONTRIBUTING.md.
 
 
 ## 0.2.0 — 2026-10-07
