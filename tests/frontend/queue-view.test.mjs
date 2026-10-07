@@ -108,7 +108,7 @@ test("rows show title – artist, the file name as tooltip", () => {
         id: "1",
         title: "Soap Shop Rock",
         artist: "Amon Düül II",
-        media_content_id: "media-source://media_source/local/Yeti/01%20Soap.mp3",
+        media_content_id: "media-source://media_source/local/Yeti/01 Soap.mp3",
       },
       { id: "2", title: "Radio", media_content_id: "http://radio/stream" },
     ],
@@ -121,9 +121,10 @@ test("rows show title – artist, the file name as tooltip", () => {
   assert.equal(plain.tooltip, "Radio");
 });
 
-test("file names of local media only, also when badly encoded", () => {
+test("file names of local media only, taken as they are (ids are not encoded)", () => {
   assert.equal(fileName("media-source://media_source/local/A/b c.mp3"), "b c.mp3");
   assert.equal(fileName("media-source://media_source/local/A/100%.mp3"), "100%.mp3");
+  assert.equal(fileName("media-source://media_source/local/A/a%20b.mp3"), "a%20b.mp3");
   assert.equal(fileName("media-source://media_source/local/"), null);
   assert.equal(fileName("media-source://media_source/local"), null);
   assert.equal(fileName("media-source://radio_browser/x"), null);

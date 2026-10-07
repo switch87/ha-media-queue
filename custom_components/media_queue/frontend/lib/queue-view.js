@@ -63,22 +63,14 @@ export function idsKey(rows) {
 
 const LOCAL_MEDIA = "media-source://media_source/";
 
-/** Return the file name of a local media item's id, else null. */
+/** Return the file name of a local media item's id, else null (ids are raw paths). */
 export function fileName(contentId) {
   if (!contentId?.startsWith(LOCAL_MEDIA)) {
     return null;
   }
   const rest = contentId.slice(LOCAL_MEDIA.length);
   const slash = rest.indexOf("/");
-  const name = slash < 0 ? "" : rest.slice(slash + 1).split("/").pop();
-  if (!name) {
-    return null;
-  }
-  try {
-    return decodeURIComponent(name);
-  } catch {
-    return name; // a "%" that is no escape
-  }
+  return (slash < 0 ? "" : rest.slice(slash + 1).split("/").pop()) || null;
 }
 
 /** Return "title – artist" (or the title alone). */
