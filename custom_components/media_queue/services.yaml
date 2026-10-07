@@ -101,3 +101,46 @@ set_repeat:
 get_queue:
   fields:
     entity_id: *entity
+
+save_playlist:
+  fields:
+    entity_id: *entity
+    name: &playlist_name
+      required: true
+      example: "Sunday morning"
+      selector:
+        text:
+    overwrite:
+      default: false
+      selector:
+        boolean:
+
+load_playlist:
+  fields:
+    entity_id: *entity
+    name: *playlist_name
+    mode:
+      default: add
+      selector:
+        select:
+          translation_key: mode
+          options:
+            - replace
+            - add
+            - next
+            - play
+
+rename_playlist:
+  fields:
+    name: *playlist_name
+    new_name:
+      required: true
+      selector:
+        text:
+
+delete_playlist:
+  fields:
+    name: *playlist_name
+
+get_playlists:
+  fields: {}

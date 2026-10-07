@@ -24,8 +24,11 @@ from .controller import QueueController
 from .expand import AddRequest
 from .manager import async_get_manager
 from .model import Mode, Repeat
+from .websocket import can_manage_playlists
 
 INDEX = vol.All(vol.Coerce(int), vol.Range(min=0))
+# The library allows 100 characters after trimming; this only bounds the input.
+NAME = vol.All(cv.string, vol.Length(max=200))
 ENTITY: dict[str | vol.Marker, Any] = {
     vol.Required(ATTR_ENTITY_ID): cv.entity_domain(MEDIA_PLAYER_DOMAIN)
 }
@@ -47,7 +50,7 @@ async def _controller(
                 context=call.context, entity_id=entity_id, permission=policy
             )
     manager = async_get_manager(hass)
-    if call.service == "add":
+    if call.service in ("add", "load_playlist"):
         return manager.controller(entity_id)
     return manager.existing(entity_id)
 
@@ -99,6 +102,25 @@ async def _set_shuffle(controller: QueueController, call: ServiceCall) -> None:
 
 async def _set_repeat(controller: QueueController, call: ServiceCall) -> None:
     controller.set_repeat(Repeat(call.data["repeat"]))
+
+
+async def _save_playlist(
+    controller: QueueController, call: ServiceCall
+) -> ServiceResponse:
+    library = async_get_manager(controller.hass).library
+    playlist = library.save(
+        call.data["name"], controller.queue.items, overwrite=call.data["overwrite"]
+    )
+    return playlist.summary()
+
+
+async def _load_playlist(
+    controller: QueueController, call: ServiceCall
+) -> ServiceResponse:
+    playlist = async_get_manager(controller.hass).library.named(call.data["name"])
+    return await controller.async_add_items(
+        playlist.items, Mode(call.data["mode"]), context=call.context
+    )
 
 
 async def _get_queue(controller: QueueController, call: ServiceCall) -> ServiceResponse:
@@ -158,6 +180,26 @@ _SERVICES: list[tuple[str, Handler, dict[str | vol.Marker, Any], SupportsRespons
         SupportsResponse.NONE,
     ),
     ("get_queue", _get_queue, {}, SupportsResponse.ONLY),
+    (
+        "save_playlist",
+        _save_playlist,
+        {
+            vol.Required("name"): NAME,
+            vol.Optional("overwrite", default=False): cv.boolean,
+        },
+        SupportsResponse.OPTIONAL,
+    ),
+    (
+        "load_playlist",
+        _load_playlist,
+        {
+            vol.Required("name"): NAME,
+            vol.Optional("mode", default=Mode.ADD.value): vol.In(
+                [mode.value for mode in Mode]
+            ),
+        },
+        SupportsResponse.OPTIONAL,
+    ),
 ]
 
 
@@ -186,3 +228,56 @@ def async_register(hass: HomeAssistant) -> None:
             schema=_schema(name, fields),
             supports_response=response,
         )
+    async_register_library(hass)
+
+
+async def _check_manager(hass: HomeAssistant, call: ServiceCall) -> None:
+    """Refuse users who may not rename or delete playlists."""
+    if call.context.user_id is None:
+        return
+    user = await hass.auth.async_get_user(call.context.user_id)
+    if user is None:
+        raise UnknownUser(context=call.context)
+    if not can_manage_playlists(hass, user):
+        raise Unauthorized(context=call.context, permission=POLICY_CONTROL)
+
+
+@callback
+def async_register_library(hass: HomeAssistant) -> None:
+    """Register the actions on the playlist library (no player involved)."""
+
+    async def get_playlists(call: ServiceCall) -> ServiceResponse:
+        summaries: list[Any] = async_get_manager(hass).library.summaries()
+        return {"playlists": summaries}
+
+    async def rename_playlist(call: ServiceCall) -> None:
+        await _check_manager(hass, call)
+        library = async_get_manager(hass).library
+        library.rename(
+            library.named(call.data["name"]).playlist_id, call.data["new_name"]
+        )
+
+    async def delete_playlist(call: ServiceCall) -> None:
+        await _check_manager(hass, call)
+        library = async_get_manager(hass).library
+        library.delete(library.named(call.data["name"]).playlist_id)
+
+    hass.services.async_register(
+        DOMAIN,
+        "get_playlists",
+        get_playlists,
+        schema=vol.Schema({}),
+        supports_response=SupportsResponse.ONLY,
+    )
+    hass.services.async_register(
+        DOMAIN,
+        "rename_playlist",
+        rename_playlist,
+        schema=vol.Schema({vol.Required("name"): NAME, vol.Required("new_name"): NAME}),
+    )
+    hass.services.async_register(
+        DOMAIN,
+        "delete_playlist",
+        delete_playlist,
+        schema=vol.Schema({vol.Required("name"): NAME}),
+    )

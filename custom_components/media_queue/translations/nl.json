@@ -228,6 +228,71 @@
           "description": "De mediaspeler waarvan de wachtrij verandert."
         }
       }
+    },
+    "save_playlist": {
+      "name": "Wachtrij als afspeellijst bewaren",
+      "description": "Bewaart de wachtrij van een speler, in de getoonde volgorde, als afspeellijst in de gedeelde bibliotheek.",
+      "fields": {
+        "entity_id": {
+          "name": "Speler",
+          "description": "De mediaspeler waarvan de wachtrij verandert."
+        },
+        "name": {
+          "name": "Naam",
+          "description": "Naam van de afspeellijst (1 tot 100 tekens)."
+        },
+        "overwrite": {
+          "name": "Overschrijven",
+          "description": "Vervang een afspeellijst die al zo heet."
+        }
+      }
+    },
+    "load_playlist": {
+      "name": "Afspeellijst laden",
+      "description": "Zet een bewaarde afspeellijst in de wachtrij van een speler.",
+      "fields": {
+        "entity_id": {
+          "name": "Speler",
+          "description": "De mediaspeler waarvan de wachtrij verandert."
+        },
+        "name": {
+          "name": "Afspeellijst",
+          "description": "Naam van de afspeellijst (hoofdletters maken niet uit)."
+        },
+        "mode": {
+          "name": "Modus",
+          "description": "Waar de items komen en of ze nu spelen."
+        }
+      }
+    },
+    "rename_playlist": {
+      "name": "Afspeellijst hernoemen",
+      "description": "Geeft een bewaarde afspeellijst een andere naam.",
+      "fields": {
+        "name": {
+          "name": "Afspeellijst",
+          "description": "Naam van de afspeellijst (hoofdletters maken niet uit)."
+        },
+        "new_name": {
+          "name": "Nieuwe naam",
+          "description": "De nieuwe naam (1 tot 100 tekens)."
+        }
+      }
+    },
+    "delete_playlist": {
+      "name": "Afspeellijst verwijderen",
+      "description": "Haalt een afspeellijst uit de bibliotheek.",
+      "fields": {
+        "name": {
+          "name": "Afspeellijst",
+          "description": "Naam van de afspeellijst (hoofdletters maken niet uit)."
+        }
+      }
+    },
+    "get_playlists": {
+      "name": "Afspeellijsten ophalen",
+      "description": "Geeft alle bewaarde afspeellijsten: naam, aantal items, totale duur.",
+      "fields": {}
     }
   }
 }

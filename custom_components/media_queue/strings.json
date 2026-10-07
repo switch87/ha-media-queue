@@ -228,6 +228,71 @@
           "description": "The media player whose queue to change."
         }
       }
+    },
+    "save_playlist": {
+      "name": "Save queue as playlist",
+      "description": "Saves a player's queue, in its shown order, as a playlist in the shared library.",
+      "fields": {
+        "entity_id": {
+          "name": "Player",
+          "description": "The media player whose queue to change."
+        },
+        "name": {
+          "name": "Name",
+          "description": "Name of the playlist (1 to 100 characters)."
+        },
+        "overwrite": {
+          "name": "Overwrite",
+          "description": "Replace a playlist that already has this name."
+        }
+      }
+    },
+    "load_playlist": {
+      "name": "Load playlist",
+      "description": "Puts a saved playlist in a player's queue.",
+      "fields": {
+        "entity_id": {
+          "name": "Player",
+          "description": "The media player whose queue to change."
+        },
+        "name": {
+          "name": "Playlist",
+          "description": "Name of the playlist (any case)."
+        },
+        "mode": {
+          "name": "Mode",
+          "description": "Where the items go and whether they play now."
+        }
+      }
+    },
+    "rename_playlist": {
+      "name": "Rename playlist",
+      "description": "Gives a saved playlist another name.",
+      "fields": {
+        "name": {
+          "name": "Playlist",
+          "description": "Name of the playlist (any case)."
+        },
+        "new_name": {
+          "name": "New name",
+          "description": "The new name (1 to 100 characters)."
+        }
+      }
+    },
+    "delete_playlist": {
+      "name": "Delete playlist",
+      "description": "Removes a playlist from the library.",
+      "fields": {
+        "name": {
+          "name": "Playlist",
+          "description": "Name of the playlist (any case)."
+        }
+      }
+    },
+    "get_playlists": {
+      "name": "Get playlists",
+      "description": "Returns every saved playlist: name, number of items, total duration.",
+      "fields": {}
     }
   }
 }

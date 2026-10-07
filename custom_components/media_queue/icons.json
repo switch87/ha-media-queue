@@ -9,6 +9,11 @@
     "clear": { "service": "mdi:playlist-remove" },
     "set_shuffle": { "service": "mdi:shuffle-variant" },
     "set_repeat": { "service": "mdi:repeat" },
-    "get_queue": { "service": "mdi:playlist-music" }
+    "get_queue": { "service": "mdi:playlist-music" },
+    "save_playlist": { "service": "mdi:content-save" },
+    "load_playlist": { "service": "mdi:playlist-play" },
+    "rename_playlist": { "service": "mdi:rename" },
+    "delete_playlist": { "service": "mdi:delete" },
+    "get_playlists": { "service": "mdi:playlist-music" }
   }
 }
