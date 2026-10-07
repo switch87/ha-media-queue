@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 import logging
+import re
 from urllib.parse import unquote
 
 from homeassistant.components import media_source
@@ -35,6 +36,15 @@ PLAYLIST_TYPES = {
 }
 
 
+# The local media source sorts plainly ("10" before "2"); its order is redone.
+LOCAL_MEDIA = "media-source://media_source/"
+VIDEO_CLASSES = {
+    MediaClass.VIDEO,
+    MediaClass.MOVIE,
+    MediaClass.EPISODE,
+    MediaClass.TV_SHOW,
+    MediaClass.SEASON,
+}
 MAX_TITLE = 300
 MAX_THUMBNAIL = 2000
 # Thumbnails the panel may load: web images and Home Assistant's media paths.
@@ -126,6 +136,11 @@ class _Walker:
         self.result = Expansion()
         self.opened: set[str] = set()
         self.calls = 0
+        # Videos inside folders are only queued for players that show them.
+        player = hass.states.get(entity_id)
+        self.videos = (
+            player is not None and player.attributes.get("device_class") == "tv"
+        )
 
     async def browse(self, content_id: str, content_type: str) -> BrowseMedia:
         """Browse one item through the media source or the player."""
@@ -149,7 +164,7 @@ class _Walker:
     async def add(self, item: BrowseMedia, *, depth: int, top: bool = False) -> None:
         """Add item, or what is below it, to the result."""
         if not item.can_expand:
-            if item.can_play and (top or _is_track(item)):
+            if item.can_play and (top or self._is_track(item)):
                 self._append(item)
             return
         before = len(self.result.items)
@@ -157,7 +172,7 @@ class _Walker:
             if depth < MAX_DEPTH and item.media_content_id not in self.opened:
                 await self._open(item, depth)
         else:
-            for child in item.children or []:
+            for child in _ordered(item):
                 await self.add(child, depth=depth + 1)
         if len(self.result.items) == before and item.can_play:
             self._append(item)
@@ -170,8 +185,19 @@ class _Walker:
         except _Unbrowsable:
             _LOGGER.debug("Skipping %s: it cannot be browsed", item.media_content_id)
             return
-        for child in listed.children or []:
+        for child in _ordered(listed):
             await self.add(child, depth=depth + 1)
+
+    def _is_track(self, item: BrowseMedia) -> bool:
+        """Return whether a playable item in a folder belongs in the queue."""
+        if item.media_class == MediaClass.IMAGE:
+            return False
+        if item.media_content_type in PLAYLIST_TYPES:
+            return False
+        is_video = item.media_class in VIDEO_CLASSES or str(
+            item.media_content_type
+        ).startswith("video/")
+        return self.videos or not is_video
 
     def _append(self, item: BrowseMedia) -> None:
         if len(self.result.items) >= self.limit:
@@ -187,12 +213,20 @@ class _Walker:
         )
 
 
-def _is_track(item: BrowseMedia) -> bool:
-    """Return whether a playable item in a folder belongs in the queue."""
-    return (
-        item.media_class != MediaClass.IMAGE
-        and item.media_content_type not in PLAYLIST_TYPES
-    )
+def _natural(title: str) -> list[tuple[int, int, str]]:
+    """Return a sort key in which "2" comes before "10"."""
+    return [
+        (0, int(part), "") if part.isdigit() else (1, 0, part)
+        for part in re.split(r"(\d+)", title.casefold())
+    ]
+
+
+def _ordered(node: BrowseMedia) -> list[BrowseMedia]:
+    """Return the children; local media folders first, then files, naturally."""
+    children = list(node.children or [])
+    if node.media_content_id.startswith(LOCAL_MEDIA):
+        children.sort(key=lambda child: (child.can_play, _natural(child.title)))
+    return children
 
 
 def _leaf(request: AddRequest) -> QueueItem:

@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { addMessage, browseMessage, itemActions, needsSigning, sourceNote } from "../../custom_components/media_queue/frontend/lib/browse-actions.js";
+import { addMessage, browseMessage, itemActions, needsSigning, sortedChildren, sourceNote } from "../../custom_components/media_queue/frontend/lib/browse-actions.js";
 
 test("folders can be opened and queued, tracks only queued", () => {
   assert.deepEqual(itemActions({ can_expand: true, can_play: false }), {
@@ -94,4 +94,21 @@ test("a note on Sonos's own library and favorites, nowhere else", () => {
   assert.equal(sourceNote(sonos, null), null);
   assert.equal(sourceNote({ platform: "mpd" }, { media_content_id: "Yeti" }), null);
   assert.equal(sourceNote(undefined, { media_content_id: "x" }), null);
+});
+
+test("local media is listed in natural order, folders first; others as given", () => {
+  const local = { media_content_id: "media-source://media_source/local/x" };
+  const children = [
+    { title: "10 Ten.mp3", can_expand: false },
+    { title: "CD 2", can_expand: true },
+    { title: "2 Two.mp3", can_expand: false },
+    { title: "CD 10", can_expand: true },
+  ];
+  assert.deepEqual(
+    sortedChildren(local, children).map((c) => c.title),
+    ["CD 2", "CD 10", "2 Two.mp3", "10 Ten.mp3"],
+  );
+  const sonos = { media_content_id: "A:ALBUM/x" };
+  assert.deepEqual(sortedChildren(sonos, children), children);
+  assert.deepEqual(sortedChildren(null, children), children);
 });

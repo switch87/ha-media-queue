@@ -57,3 +57,18 @@ export function sourceNote(entityEntry, node) {
   }
   return node.media_content_id.startsWith("media-source://") ? null : "note_sonos_library";
 }
+
+const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" });
+
+/**
+ * Return the children to list: local media in natural order ("2" before
+ * "10"), folders first, like the queue gets them; other sources as given.
+ */
+export function sortedChildren(node, children) {
+  if (!node?.media_content_id?.startsWith("media-source://media_source/")) {
+    return children;
+  }
+  return [...children].sort(
+    (a, b) => Number(!a.can_expand) - Number(!b.can_expand) || collator.compare(a.title, b.title),
+  );
+}

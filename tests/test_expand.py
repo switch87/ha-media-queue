@@ -455,3 +455,23 @@ async def test_titles_are_trimmed_and_capped(hass: HomeAssistant) -> None:
         limit=10,
     )
     assert result.items[0].title == "z" * 300
+
+
+async def test_local_files_in_natural_order_without_videos(
+    hass: HomeAssistant, library: Path
+) -> None:
+    """Track 10 comes after track 2; videos in folders are skipped for speakers."""
+    album = library / "Natural"
+    album.mkdir()
+    for name in ("10 Ten.mp3", "2 Two.mp3", "1 One.mp3", "clip.mp4"):
+        (album / name).write_bytes(b"")
+    request = AddRequest(
+        media_content_id=f"{LOCAL}/local/Natural", media_content_type=""
+    )
+    hass.states.async_set(PLAYER, "idle", {"device_class": "speaker"})
+    result = await async_expand(hass, PLAYER, request, limit=10)
+    assert _titles(result.items) == ["1 One.mp3", "2 Two.mp3", "10 Ten.mp3"]
+
+    hass.states.async_set(PLAYER, "idle", {"device_class": "tv"})
+    result = await async_expand(hass, PLAYER, request, limit=10)
+    assert _titles(result.items) == ["1 One.mp3", "2 Two.mp3", "10 Ten.mp3", "clip.mp4"]
