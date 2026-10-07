@@ -52,7 +52,7 @@ def test_every_exception_key_is_translated() -> None:
         )
     }
     assert used == set(_load("strings.json")["exceptions"])
-    assert len(used) == 8
+    assert len(used) >= 9  # the regex really finds them
 
 
 def test_every_service_and_field_is_described() -> None:

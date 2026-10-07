@@ -18,6 +18,7 @@ from homeassistant.exceptions import Unauthorized
 from homeassistant.helpers import config_validation as cv
 import voluptuous as vol
 
+from .controller import QueueController
 from .expand import AddRequest
 from .manager import async_get_manager
 from .model import Mode
@@ -26,6 +27,27 @@ ENTITY: dict[str | vol.Marker, Any] = {
     vol.Required("entity_id"): cv.entity_domain(MEDIA_PLAYER_DOMAIN)
 }
 INDEX = vol.All(vol.Coerce(int), vol.Range(min=0))
+
+
+def _item_schema(command: str) -> vol.All:
+    """Return a schema that names one item by item_id or index."""
+    return vol.All(
+        vol.Schema(
+            {
+                vol.Required("type"): command,
+                **ENTITY,
+                vol.Optional("item_id"): cv.string,
+                vol.Optional("index"): INDEX,
+            }
+        ),
+        cv.has_at_least_one_key("item_id", "index"),
+    )
+
+
+def _position(controller: QueueController, msg: dict[str, Any]) -> int:
+    return controller.resolve(msg.get("item_id"), msg.get("index"))
+
+
 type Connection = ActiveConnection
 
 
@@ -122,13 +144,7 @@ async def ws_add(
     connection.send_result(msg["id"], result)
 
 
-@websocket_command(
-    {
-        vol.Required("type"): "media_queue/play_index",
-        **ENTITY,
-        vol.Required("index"): INDEX,
-    }
-)
+@websocket_command(_item_schema("media_queue/play_index"))
 @async_response
 async def ws_play_index(
     hass: HomeAssistant, connection: Connection, msg: dict[str, Any]
@@ -136,7 +152,9 @@ async def ws_play_index(
     """Jump to an item."""
     _allow(connection, msg["entity_id"], POLICY_CONTROL)
     controller = async_get_manager(hass).controller(msg["entity_id"])
-    await controller.async_play(msg["index"], context=connection.context(msg))
+    await controller.async_play(
+        _position(controller, msg), context=connection.context(msg)
+    )
     connection.send_result(msg["id"])
 
 
@@ -164,31 +182,37 @@ async def ws_previous(
     connection.send_result(msg["id"])
 
 
-@websocket_command(
-    {vol.Required("type"): "media_queue/remove", **ENTITY, vol.Required("index"): INDEX}
-)
+@websocket_command(_item_schema("media_queue/remove"))
 @callback
 def ws_remove(hass: HomeAssistant, connection: Connection, msg: dict[str, Any]) -> None:
     """Remove an item."""
     _allow(connection, msg["entity_id"], POLICY_CONTROL)
-    async_get_manager(hass).controller(msg["entity_id"]).remove(msg["index"])
+    controller = async_get_manager(hass).controller(msg["entity_id"])
+    controller.remove(_position(controller, msg))
     connection.send_result(msg["id"])
 
 
 @websocket_command(
-    {
-        vol.Required("type"): "media_queue/move",
-        **ENTITY,
-        vol.Required("from_index"): INDEX,
-        vol.Required("to_index"): INDEX,
-    }
+    vol.All(
+        vol.Schema(
+            {
+                vol.Required("type"): "media_queue/move",
+                **ENTITY,
+                vol.Optional("item_id"): cv.string,
+                vol.Optional("from_index"): INDEX,
+                vol.Required("to_index"): INDEX,
+            }
+        ),
+        cv.has_at_least_one_key("item_id", "from_index"),
+    )
 )
 @callback
 def ws_move(hass: HomeAssistant, connection: Connection, msg: dict[str, Any]) -> None:
     """Move an item."""
     _allow(connection, msg["entity_id"], POLICY_CONTROL)
     controller = async_get_manager(hass).controller(msg["entity_id"])
-    controller.move(msg["from_index"], msg["to_index"])
+    source = controller.resolve(msg.get("item_id"), msg.get("from_index"))
+    controller.move(source, msg["to_index"])
     connection.send_result(msg["id"])
 
 

@@ -255,6 +255,19 @@ class QueueController:
         self.queue.clear()
         self.async_changed()
 
+    def resolve(self, item_id: str | None, index: int | None) -> int:
+        """Return the position of an item named by id (preferred) or index."""
+        if item_id is None:
+            assert index is not None  # the schemas require one of both
+            return index
+        if (position := self.queue.index_of(item_id)) is None:
+            raise ServiceValidationError(
+                translation_domain=DOMAIN,
+                translation_key="unknown_item",
+                translation_placeholders={"item_id": item_id},
+            )
+        return position
+
     def _check(self, index: int) -> None:
         if not 0 <= index < len(self.queue.items):
             raise ServiceValidationError(

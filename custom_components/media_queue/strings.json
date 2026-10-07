@@ -33,6 +33,9 @@
     },
     "queue_full": {
       "message": "The queue is full ({limit} items)."
+    },
+    "unknown_item": {
+      "message": "The item {item_id} is no longer in the queue."
     }
   },
   "selector": {
@@ -80,6 +83,10 @@
           "name": "Player",
           "description": "The media player whose queue to change."
         },
+        "item_id": {
+          "name": "Item ID",
+          "description": "ID of the queue item (from get_queue); instead of the position."
+        },
         "index": {
           "name": "Position",
           "description": "Position in the queue, 0 is the first item."
@@ -114,6 +121,10 @@
           "name": "Player",
           "description": "The media player whose queue to change."
         },
+        "item_id": {
+          "name": "Item ID",
+          "description": "ID of the queue item (from get_queue); instead of the position."
+        },
         "index": {
           "name": "Position",
           "description": "Position in the queue, 0 is the first item."
@@ -127,6 +138,10 @@
         "entity_id": {
           "name": "Player",
           "description": "The media player whose queue to change."
+        },
+        "item_id": {
+          "name": "Item ID",
+          "description": "ID of the queue item (from get_queue); instead of the position."
         },
         "from_index": {
           "name": "From position",

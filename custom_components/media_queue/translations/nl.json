@@ -33,6 +33,9 @@
     },
     "queue_full": {
       "message": "De wachtrij is vol ({limit} items)."
+    },
+    "unknown_item": {
+      "message": "Het item {item_id} staat niet meer in de wachtrij."
     }
   },
   "selector": {
@@ -80,6 +83,10 @@
           "name": "Speler",
           "description": "De mediaspeler waarvan de wachtrij verandert."
         },
+        "item_id": {
+          "name": "Item-ID",
+          "description": "ID van het wachtrij-item (uit get_queue); in plaats van de positie."
+        },
         "index": {
           "name": "Positie",
           "description": "Positie in de wachtrij, 0 is het eerste item."
@@ -114,6 +121,10 @@
           "name": "Speler",
           "description": "De mediaspeler waarvan de wachtrij verandert."
         },
+        "item_id": {
+          "name": "Item-ID",
+          "description": "ID van het wachtrij-item (uit get_queue); in plaats van de positie."
+        },
         "index": {
           "name": "Positie",
           "description": "Positie in de wachtrij, 0 is het eerste item."
@@ -127,6 +138,10 @@
         "entity_id": {
           "name": "Speler",
           "description": "De mediaspeler waarvan de wachtrij verandert."
+        },
+        "item_id": {
+          "name": "Item-ID",
+          "description": "ID van het wachtrij-item (uit get_queue); in plaats van de positie."
         },
         "from_index": {
           "name": "Van positie",

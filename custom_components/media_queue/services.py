@@ -60,8 +60,14 @@ async def _add(controller: QueueController, call: ServiceCall) -> ServiceRespons
     )
 
 
+def _position(controller: QueueController, call: ServiceCall, key: str) -> int:
+    return controller.resolve(call.data.get("item_id"), call.data.get(key))
+
+
 async def _play_index(controller: QueueController, call: ServiceCall) -> None:
-    await controller.async_play(call.data["index"], context=call.context)
+    await controller.async_play(
+        _position(controller, call, "index"), context=call.context
+    )
 
 
 async def _next(controller: QueueController, call: ServiceCall) -> None:
@@ -73,11 +79,11 @@ async def _previous(controller: QueueController, call: ServiceCall) -> None:
 
 
 async def _remove(controller: QueueController, call: ServiceCall) -> None:
-    controller.remove(call.data["index"])
+    controller.remove(_position(controller, call, "index"))
 
 
 async def _move(controller: QueueController, call: ServiceCall) -> None:
-    controller.move(call.data["from_index"], call.data["to_index"])
+    controller.move(_position(controller, call, "from_index"), call.data["to_index"])
 
 
 async def _clear(controller: QueueController, call: ServiceCall) -> None:
@@ -87,6 +93,17 @@ async def _clear(controller: QueueController, call: ServiceCall) -> None:
 async def _get_queue(controller: QueueController, call: ServiceCall) -> ServiceResponse:
     return controller.snapshot()
 
+
+ITEM: dict[str | vol.Marker, Any] = {
+    vol.Optional("item_id"): cv.string,
+    vol.Optional("index"): INDEX,
+}
+# The fields that name the item: one of them is required.
+_ONE_OF = {
+    "play_index": ("item_id", "index"),
+    "remove": ("item_id", "index"),
+    "move": ("item_id", "from_index"),
+}
 
 _SERVICES: list[tuple[str, Handler, dict[str | vol.Marker, Any], SupportsResponse]] = [
     (
@@ -102,19 +119,30 @@ _SERVICES: list[tuple[str, Handler, dict[str | vol.Marker, Any], SupportsRespons
         },
         SupportsResponse.OPTIONAL,
     ),
-    ("play_index", _play_index, {vol.Required("index"): INDEX}, SupportsResponse.NONE),
+    ("play_index", _play_index, ITEM, SupportsResponse.NONE),
     ("next", _next, {}, SupportsResponse.NONE),
     ("previous", _previous, {}, SupportsResponse.NONE),
-    ("remove", _remove, {vol.Required("index"): INDEX}, SupportsResponse.NONE),
+    ("remove", _remove, ITEM, SupportsResponse.NONE),
     (
         "move",
         _move,
-        {vol.Required("from_index"): INDEX, vol.Required("to_index"): INDEX},
+        {
+            vol.Optional("item_id"): cv.string,
+            vol.Optional("from_index"): INDEX,
+            vol.Required("to_index"): INDEX,
+        },
         SupportsResponse.NONE,
     ),
     ("clear", _clear, {}, SupportsResponse.NONE),
     ("get_queue", _get_queue, {}, SupportsResponse.ONLY),
 ]
+
+
+def _schema(name: str, fields: dict[str | vol.Marker, Any]) -> vol.Schema | vol.All:
+    schema = vol.Schema({**ENTITY, **fields})
+    if name in _ONE_OF:
+        return vol.All(schema, cv.has_at_least_one_key(*_ONE_OF[name]))
+    return schema
 
 
 @callback
@@ -132,6 +160,6 @@ def async_register(hass: HomeAssistant) -> None:
             DOMAIN,
             name,
             handle,
-            schema=vol.Schema({**ENTITY, **fields}),
+            schema=_schema(name, fields),
             supports_response=response,
         )

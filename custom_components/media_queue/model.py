@@ -113,6 +113,13 @@ class Queue:
         position = self.current if self.current is not None else self.next_position
         return max(position - 1, 0)
 
+    def index_of(self, item_id: str) -> int | None:
+        """Return the position of the item with item_id, or None."""
+        for index, item in enumerate(self.items):
+            if item.item_id == item_id:
+                return index
+        return None
+
     def set_current(self, index: int) -> None:
         """Make index the current item."""
         self._check(index)

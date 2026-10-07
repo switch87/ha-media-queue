@@ -112,6 +112,8 @@ class MediaQueuePanel extends HTMLElement {
     this._signed = new Map();
     this._toastTimer = null;
     this._lastErrorAt = null;
+    this._dragging = false;
+    this._retryTimer = null;
   }
 
   set hass(hass) {
@@ -300,8 +302,10 @@ class MediaQueuePanel extends HTMLElement {
       },
       { type: "media_queue/subscribe", entity_id: entityId },
     );
-    this._unsubscribe.catch((err) => {
-      if (this._unsubscribe) this._notify(this.t("error", { message: err.message ?? err.code }));
+    const pending = this._unsubscribe;
+    pending.catch((err) => {
+      if (this._unsubscribe !== pending) return; // another player was chosen meanwhile
+      this._notify(this.t("error", { message: err.message ?? err.code }));
       this._unsubscribe = null;
       this._retry(5000);
     });
@@ -455,7 +459,7 @@ class MediaQueuePanel extends HTMLElement {
     this._queueCount.textContent = this.t("items", { count: rows.length });
     this._clearButton.disabled = rows.length === 0;
     const key = rowsKey(rows);
-    if (key === this._rowsKey) return;
+    if (key === this._rowsKey || this._dragging) return;
     this._rowsKey = key;
     if (!rows.length) {
       this._queueList.replaceChildren(h("li", { class: "empty" }, this.t("empty_queue")));
@@ -473,7 +477,7 @@ class MediaQueuePanel extends HTMLElement {
               class: "handle",
               title: this.t("move"),
               "aria-label": this.t("move"),
-              onpointerdown: (e) => this._startDrag(e, row.index),
+              onpointerdown: (e) => this._startDrag(e, row.index, row.id),
             },
             icon("mdi:drag"),
           ),
@@ -483,7 +487,7 @@ class MediaQueuePanel extends HTMLElement {
             {
               class: "title link",
               title: items[row.index].title,
-              onclick: () => this._call({ type: "media_queue/play_index", index: row.index }),
+              onclick: () => this._call({ type: "media_queue/play_index", item_id: row.id }),
             },
             row.title,
           ),
@@ -492,7 +496,7 @@ class MediaQueuePanel extends HTMLElement {
             {
               title: this.t("remove"),
               "aria-label": `${this.t("remove")}: ${row.title}`,
-              onclick: () => this._call({ type: "media_queue/remove", index: row.index }),
+              onclick: () => this._call({ type: "media_queue/remove", item_id: row.id }),
             },
             icon("mdi:close"),
           ),
@@ -501,8 +505,9 @@ class MediaQueuePanel extends HTMLElement {
     );
   }
 
-  _startDrag(event, from) {
+  _startDrag(event, from, itemId) {
     event.preventDefault();
+    this._dragging = true; // updates wait until the drop, the rows stay put
     const handle = event.currentTarget;
     try {
       handle.setPointerCapture(event.pointerId); // keep the moves while outside the handle
@@ -525,8 +530,10 @@ class MediaQueuePanel extends HTMLElement {
       handle.removeEventListener("pointercancel", cancel);
       clear();
       rows[from].classList.remove("dragging");
+      this._dragging = false;
       const to = target ? dropIndex(from, target.index, target.before, rows.length) : null;
-      if (to !== null) this._call({ type: "media_queue/move", from_index: from, to_index: to });
+      if (to !== null) this._call({ type: "media_queue/move", item_id: itemId, to_index: to });
+      this._renderQueue();
     };
     const cancel = () => {
       target = null;

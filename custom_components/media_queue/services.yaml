@@ -36,8 +36,10 @@ play_index:
       selector:
         entity:
           domain: media_player
+    item_id: &item_id
+      selector:
+        text:
     index: &index
-      required: true
       selector:
         number:
           min: 0
@@ -55,13 +57,21 @@ previous:
 remove:
   fields:
     entity_id: *entity
+    item_id: *item_id
     index: *index
 
 move:
   fields:
     entity_id: *entity
+    item_id: *item_id
     from_index: *index
-    to_index: *index
+    to_index:
+      required: true
+      selector:
+        number:
+          min: 0
+          max: 999
+          mode: box
 
 clear:
   fields:

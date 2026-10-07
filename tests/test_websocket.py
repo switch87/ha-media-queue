@@ -211,3 +211,28 @@ async def test_reload_closes_and_resubscribe_works(
     assert reply["success"]
     await client.call("add", entity_id=PLAYER, mode="add", **FOLDER)
     assert client.events[-1]["id"] == reply["id"]
+
+
+async def test_commands_by_item_id(client: Client, log: PlayerLog) -> None:
+    """The panel names items by id, so a queue changed meanwhile is no problem."""
+    await client.call("add", entity_id=PLAYER, mode="add", **FOLDER)
+    items = (await client.call("get", entity_id=PLAYER))["result"]["items"]
+    ids = [item["id"] for item in items]
+    await client.call("remove", entity_id=PLAYER, index=0)  # someone else
+
+    assert (await client.call("remove", entity_id=PLAYER, item_id=ids[2]))["success"]
+    assert (await client.call("move", entity_id=PLAYER, item_id=ids[4], to_index=0))[
+        "success"
+    ]
+    assert (await client.call("play_index", entity_id=PLAYER, item_id=ids[3]))[
+        "success"
+    ]
+    result = (await client.call("get", entity_id=PLAYER))["result"]
+    assert [item["id"] for item in result["items"]] == [ids[4], ids[1], ids[3]]
+    assert result["current"] == 2
+    assert log.played == ["d.mp3"]
+
+    reply = await client.call("remove", entity_id=PLAYER, item_id=ids[0])
+    assert reply["error"]["translation_key"] == "unknown_item"
+    reply = await client.call("remove", entity_id=PLAYER)
+    assert reply["error"]["code"] == "invalid_format"

@@ -119,3 +119,20 @@ async def test_permissions(
     )
     assert queue is not None
     assert queue["items"] == []
+
+
+async def test_by_item_id(hass: HomeAssistant, log: PlayerLog) -> None:
+    """Actions accept an item id instead of a position."""
+    await _call(hass, "add", media_content_id=f"{LOCAL}/Yeti", media_content_type="")
+    queue = await _call(hass, "get_queue", response=True)
+    assert isinstance(queue, dict)
+    ids = [item["id"] for item in queue["items"]]
+    await _call(hass, "remove", item_id=ids[0])
+    await _call(hass, "move", item_id=ids[4], to_index=0)
+    await _call(hass, "play_index", item_id=ids[2])
+    queue = await _call(hass, "get_queue", response=True)
+    assert isinstance(queue, dict)
+    assert [item["id"] for item in queue["items"]] == [ids[4], ids[1], ids[2], ids[3]]
+    assert log.played == ["c.mp3"]
+    with pytest.raises(vol.Invalid):
+        await _call(hass, "remove")
