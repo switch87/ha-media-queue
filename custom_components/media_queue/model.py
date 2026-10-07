@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import StrEnum
+import math
 import random
 from typing import Any
 from uuid import uuid4
@@ -34,6 +35,13 @@ def _optional_str(value: Any) -> str | None:
     return value if isinstance(value, str) else None
 
 
+def _duration(value: Any) -> float | None:
+    """Return a positive finite number of seconds, else None."""
+    if isinstance(value, bool) or not isinstance(value, int | float):
+        return None
+    return float(value) if math.isfinite(value) and value > 0 else None
+
+
 @dataclass(frozen=True, slots=True, kw_only=True)
 class QueueItem:
     """One playable item in a queue."""
@@ -43,6 +51,9 @@ class QueueItem:
     title: str
     media_class: str | None = None
     thumbnail: str | None = None
+    artist: str | None = None
+    album: str | None = None
+    duration: float | None = None
     item_id: str = field(default_factory=_new_id)
 
     def as_dict(self) -> dict[str, Any]:
@@ -54,6 +65,9 @@ class QueueItem:
             "title": self.title,
             "media_class": self.media_class,
             "thumbnail": self.thumbnail,
+            "artist": self.artist,
+            "album": self.album,
+            "duration": self.duration,
         }
 
     @classmethod
@@ -74,6 +88,9 @@ class QueueItem:
             title=data["title"],
             media_class=_optional_str(data.get("media_class")),
             thumbnail=_optional_str(data.get("thumbnail")),
+            artist=_optional_str(data.get("artist")),
+            album=_optional_str(data.get("album")),
+            duration=_duration(data.get("duration")),
         )
 
 

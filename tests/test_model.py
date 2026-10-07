@@ -276,6 +276,9 @@ def test_item_round_trip() -> None:
         title="X",
         media_class="track",
         thumbnail="/t.jpg",
+        artist="A",
+        album="B",
+        duration=12.5,
         item_id="abc",
     )
     assert QueueItem.from_dict(item.as_dict()) == item
@@ -286,6 +289,9 @@ def test_item_round_trip() -> None:
         "title": "X",
         "media_class": "track",
         "thumbnail": "/t.jpg",
+        "artist": "A",
+        "album": "B",
+        "duration": 12.5,
     }
 
 
@@ -317,11 +323,43 @@ def test_item_from_dict_ignores_bad_optionals() -> None:
             "title": "t",
             "media_class": 3,
             "thumbnail": ["no"],
+            "artist": 1,
+            "album": None,
+            "duration": "long",
         }
     )
     assert item is not None
     assert item.media_class is None
     assert item.thumbnail is None
+    assert item.artist is None
+    assert item.album is None
+    assert item.duration is None
+
+
+@pytest.mark.parametrize(
+    ("value", "duration"),
+    [
+        (200, 200.0),
+        (1.5, 1.5),
+        (0, None),
+        (-3, None),
+        (True, None),
+        (float("inf"), None),
+    ],
+)
+def test_item_duration_from_dict(value: Any, duration: float | None) -> None:
+    """Only a positive finite number is a duration."""
+    item = QueueItem.from_dict(
+        {
+            "id": "a",
+            "media_content_id": "x",
+            "media_content_type": "m",
+            "title": "t",
+            "duration": value,
+        }
+    )
+    assert item is not None
+    assert item.duration == duration
 
 
 def test_queue_round_trip() -> None:

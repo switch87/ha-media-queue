@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Callable
+import dataclasses
 from datetime import datetime
 from enum import StrEnum
 import logging
@@ -45,6 +46,7 @@ from homeassistant.util import dt as dt_util
 from .const import DOMAIN, QUEUE_LIMIT
 from .expand import AddRequest, async_expand
 from .model import Mode, Queue, QueueItem, Repeat
+from .tags import Tags, local_file, read_batch
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -56,6 +58,12 @@ END_TOLERANCE = 5.0
 RESTART_WINDOW = 15.0
 # Items that fail in a row before automatic advancing gives up.
 MAX_SKIPS = 3
+# Tags: items read per add, files per batch, seconds of reading per batch
+# (smaller batches on a slow mount), seconds before a batch counts as hung.
+TAG_LIMIT = 1000
+TAG_BATCH = 100
+TAG_BUDGET = 2.0
+TAG_TIMEOUT = 30
 # Seconds a player may take to start an item before it counts as failed.
 STARTING_TIMEOUT = 25
 
@@ -145,6 +153,8 @@ class QueueController:
         self.fingerprint: str | None = None
         self._on_change = on_change
         self._lock = asyncio.Lock()
+        # One tag reading at a time per player.
+        self._tag_lock = asyncio.Lock()
         self._unsubscribe: CALLBACK_TYPE = _nothing
         self._tasks: set[asyncio.Task[None]] = set()
         self._watchdog: CALLBACK_TYPE = _nothing
@@ -209,12 +219,11 @@ class QueueController:
             )
         async with self._lock:
             result = self.queue.add(expansion.items, mode, limit=QUEUE_LIMIT)
+            self.async_changed()
+            self._enrich(expansion.items[: result.added])
             if mode in (Mode.REPLACE, Mode.PLAY):
-                self.async_changed()
                 self._failures = 0
                 await self._play(result.start, context)
-            else:
-                self.async_changed()
         return {
             "added": result.added,
             "truncated": expansion.truncated or result.truncated,
@@ -265,6 +274,61 @@ class QueueController:
         """Remove every item; a playing item plays on, then the queue stops."""
         self.queue.clear()
         self.async_changed()
+
+    def _enrich(self, items: list[QueueItem]) -> None:
+        """Read the tags of new local items in the background."""
+        media_dirs = self.hass.config.media_dirs
+        files = [
+            (item.item_id, *found)
+            for item in items[:TAG_LIMIT]
+            if (found := local_file(media_dirs, item.media_content_id)) is not None
+        ]
+        if not files:
+            return
+        task = self.hass.async_create_background_task(
+            self._async_enrich(files), f"{DOMAIN} tags {self.entity_id}"
+        )
+        self._tasks.add(task)
+        task.add_done_callback(self._tasks.discard)
+
+    async def _async_enrich(self, files: list[tuple[str, str, str]]) -> None:
+        """Read tags batch by batch; each batch updates the queue once."""
+        async with self._tag_lock:
+            while files:
+                try:
+                    count, found = await asyncio.wait_for(
+                        self.hass.async_add_executor_job(
+                            read_batch, files[:TAG_BATCH], TAG_BUDGET
+                        ),
+                        TAG_TIMEOUT,
+                    )
+                except TimeoutError:
+                    _LOGGER.warning(
+                        "%s: reading tags takes too long; keeping file names",
+                        self.entity_id,
+                    )
+                    return
+                files = files[count:]
+                if self._apply_tags(found):
+                    self.async_changed()
+
+    def _apply_tags(self, found: dict[str, Tags]) -> bool:
+        """Put the tags on the items still in the queue; return if any were."""
+        positions = {item.item_id: n for n, item in enumerate(self.queue.items)}
+        changed = False
+        for item_id, tags in found.items():
+            if (position := positions.get(item_id)) is None:
+                continue  # removed meanwhile
+            item = self.queue.items[position]
+            self.queue.items[position] = dataclasses.replace(
+                item,
+                title=tags.title or item.title,
+                artist=tags.artist,
+                album=tags.album,
+                duration=tags.duration,
+            )
+            changed = True
+        return changed
 
     @callback
     def set_shuffle(self, on: bool) -> None:
@@ -497,6 +561,8 @@ class QueueController:
     def _ended(self, old: State, at: datetime) -> bool:
         """Return whether the item old was playing has reached its end."""
         duration = _number(old.attributes.get(ATTR_MEDIA_DURATION))
+        if not duration and (current := self.queue.current) is not None:
+            duration = self.queue.items[current].duration  # from the tags
         if not duration:
             return False  # streams and unknown lengths never end by themselves
         position = _number(old.attributes.get(ATTR_MEDIA_POSITION))

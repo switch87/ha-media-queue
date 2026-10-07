@@ -3,3 +3,4 @@ pytest-cov
 mypy
 ruff
 home-assistant-frontend==20260826.7
+mutagen==1.48.1
