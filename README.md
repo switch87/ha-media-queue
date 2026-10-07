@@ -13,7 +13,16 @@ DLNA, …), the queue on the right, transport controls on top.
   it, drag the handle to reorder, clear it with the button in its header.
 - Players stay normal entities: pause and volume go to the player itself;
   previous/next go through the queue.
-- Queues survive a restart (stored in `.storage/media_queue`).
+- **Shuffle** (🔀) and **repeat** (🔁 off → whole queue → current item) per
+  player, next to previous/next. They are kept by the queue, not by the
+  player: the player's own shuffle/repeat (MPD's random/repeat, Sonos's play
+  mode) is never touched. See "Shuffle and repeat" below.
+- **Titles from the tags**: items from the local media source (your music
+  folder or NAS mount) show "title – artist" from the files' ID3/Vorbis/MP4
+  tags instead of the file name (the file name is the tooltip). See "Titles
+  from the tags" below.
+- Queues, their shuffle/repeat settings and the tag titles survive a restart
+  (stored in `.storage/media_queue`).
 - **Playlists** (`.m3u`, `.m3u8`, `.pls` on the local media source): adding a
   playlist queues its entries in order, with the `#EXTINF`/`TitleN` titles.
   Entries are relative to the playlist's folder (absolute paths inside the
@@ -34,8 +43,15 @@ Copy `custom_components/media_queue` to `/config/custom_components/`, restart
 Home Assistant, then *Settings → Devices & services → Add integration → Media
 queue*. Nothing to configure. The sidebar gets **Muziek** for every user.
 
-No extra Python packages; the panel is a few small JavaScript modules served by
-the integration (no build step, nothing from the internet).
+One Python package: **mutagen 1.48.1** (pure Python, ~200 kB), the version
+Home Assistant core itself pins for its `tts` integration, so it is usually
+installed already; otherwise Home Assistant installs it at the restart. The
+panel is a few small JavaScript modules served by the integration (no build
+step, nothing from the internet).
+
+Updating from 0.1.0: copy the new folder, restart. The stored queues are
+migrated (storage version 1.1 → 1.2: shuffle off, repeat off). Going back to
+0.1.0 keeps working; it ignores the new fields.
 
 ## How playing works
 
@@ -65,6 +81,53 @@ Items that fail to play during advancing are skipped (at most 3 in a row), as
 are items the player accepts but does not start within 25 s (a URL it cannot
 fetch, a format it cannot play). The panel shows these errors.
 
+## Shuffle and repeat
+
+- The queue list always shows the **real play order**. Turning shuffle on
+  moves the current item to the top (it keeps playing, it stays current) and
+  shuffles every other item after it; the panel says "Shuffled: the queue is
+  shown in play order." Turning shuffle off puts the queue back in the order
+  it was added in (album order), with the current item still current.
+- Adding while shuffled: **Add to queue** mixes the new items at random
+  places after the current item; **Play next** puts them (shuffled among
+  themselves) right after the current item; **Play** replaces the queue with
+  the new items, shuffled. In the remembered album order they go where they
+  would have gone without shuffle.
+- Jump, remove and drag work as usual on the shown (play) order.
+- **Repeat whole queue**: after the last item (when it ends, or with the next
+  button) the queue starts again at the top; when shuffled it is shuffled anew
+  first, without starting with the item that just played.
+- **Repeat current item**: when the item ends it plays again. Next and
+  previous still move to another item (repeat stays on). An item that does not
+  start is not retried: the queue goes on with the next one.
+- Both settings are per player and survive a restart; they are also in the
+  actions and the websocket API (`set_shuffle`, `set_repeat`).
+
+## Titles from the tags
+
+For items of the local media source (`media-source://media_source/…`), the
+title, artist, album and duration are read from the file's tags with
+mutagen. Everything else (radio, DLNA, Sonos library, …) keeps the title the
+media browser gives it.
+
+- **Add first, tags after**: an add is as fast as before; the items appear
+  with their file name (or the playlist's `#EXTINF` title), then a background
+  job reads the tags and the queue updates itself (in batches: at most 100
+  files or 2 s of reading per batch, one queue update per batch, at most 1000
+  files per add). Only the tag header and the first audio frame are read: on
+  a local disk 0.1–0.5 ms and under 1 kB (MP3) or ~9 kB (FLAC) per file, about
+  twenty small reads; over a network mount (CIFS) expect a few milliseconds
+  per file.
+- A tag title wins over `#EXTINF`, which wins over the file name. Files over
+  1 GiB are skipped; a batch that does not return within 30 s (a hung mount)
+  ends the reading for that add and the file names stay.
+- The duration from the tags is also used to recognise the end of an item
+  when the player does not report a duration itself (radio and streams still
+  never end by themselves: they have no tags).
+- Items that were in the queue before 0.2.0, or whose reading was cut short
+  by a restart, keep their file name until they are added again (nothing is
+  re-read at start-up).
+
 ## What the players themselves do with each item
 
 The queue plays one item at a time with a plain `media_player.play_media`
@@ -75,7 +138,8 @@ The queue plays one item at a time with a plain `media_player.play_media`
   item; the queue lives in Home Assistant. MPD reports durations as text; that
   is handled. **Turn MPD's repeat mode off**: with repeat on (and single off or
   on), MPD replays the single item forever, never stops, and the queue never
-  moves on. Random/consume make no difference with one item.
+  moves on. Random/consume make no difference with one item. Use the queue's
+  own shuffle and repeat buttons instead; they never change MPD's modes.
 - **Sonos (core `sonos`)**: files and streams from the media sources are
   played with Sonos's "play URI" path (Sonos's own queue is left alone).
   Items from **Sonos favorites or the Sonos music library** (ids such as
@@ -90,8 +154,9 @@ The queue plays one item at a time with a plain `media_player.play_media`
 `media_queue.add` (`entity_id`, `media_content_id`, `media_content_type`,
 `mode`: replace/add/next/play, `title`), `media_queue.play_index`,
 `media_queue.next`, `media_queue.previous`, `media_queue.remove`,
-`media_queue.move`, `media_queue.clear`, and `media_queue.get_queue` (returns
-the queue). `play_index`, `remove` and `move` take an `item_id` (from
+`media_queue.move`, `media_queue.clear`, `media_queue.set_shuffle`
+(`shuffle`: true/false), `media_queue.set_repeat` (`repeat`: off/all/one), and
+`media_queue.get_queue` (returns the queue, with `shuffle` and `repeat`). `play_index`, `remove` and `move` take an `item_id` (from
 `get_queue`) or a position. Users who may not control a player cannot change
 its queue; players that do not exist are refused (only `add` creates a queue).
 
@@ -99,9 +164,14 @@ its queue; players that do not exist are refused (only `add` creates a queue).
 
 `media_queue/get`, `media_queue/subscribe`, `media_queue/add`,
 `media_queue/play_index`, `media_queue/remove`, `media_queue/move`,
-`media_queue/clear`, `media_queue/next`, `media_queue/previous`; all take
-`entity_id`; items are named by `item_id` (the index is a fallback). The
-subscription sends a full snapshot when the items change and a small
+`media_queue/clear`, `media_queue/next`, `media_queue/previous`,
+`media_queue/set_shuffle` (`shuffle`), `media_queue/set_repeat` (`repeat`);
+all take `entity_id`; items are named by `item_id` (the index is a fallback).
+A snapshot holds `items` (in play order, each with `title`, `artist`,
+`album`, `duration` when known), `current`, `next` (what the next button
+plays; `null` at the end, also with repeat all + shuffle because the new order
+is drawn when it wraps), `shuffle`, `repeat`, `phase` and `last_error`. The
+subscription sends a full snapshot when the items or settings change and a small
 `{"playback": true, current, next, phase, last_error}` update when only
 playback changes; `{"closed": true}` when the integration unloads.
 
@@ -119,3 +189,7 @@ python3.14 -m venv .venv && .venv/bin/pip install -r requirements_test.txt
 .venv/bin/ruff check . && .venv/bin/ruff format --check .
 npm test                               # node --test, 100 % for frontend/lib
 ```
+
+`scripts/make_dev_library.py <folder>` writes a few tiny tagged MP3 albums
+into a dev media folder (for checking tag titles, shuffle and repeat on a
+local Home Assistant).
