@@ -22,11 +22,23 @@
     "invalid_index": {
       "message": "There is no item {index} in the queue ({count} items)."
     },
+    "invalid_name": {
+      "message": "A playlist name is 1 to {max} characters long."
+    },
     "not_loaded": {
       "message": "The media queue integration is not loaded."
     },
     "nothing_to_add": {
       "message": "\"{item}\" contains nothing that can be played."
+    },
+    "playlist_empty": {
+      "message": "An empty queue cannot be saved as a playlist."
+    },
+    "playlist_exists": {
+      "message": "A playlist called \"{name}\" already exists."
+    },
+    "playlist_too_long": {
+      "message": "A playlist holds at most {limit} items."
     },
     "queue_empty": {
       "message": "The queue is empty."
@@ -34,11 +46,17 @@
     "queue_full": {
       "message": "The queue is full ({limit} items)."
     },
+    "too_many_playlists": {
+      "message": "The library holds at most {limit} playlists."
+    },
     "unknown_item": {
       "message": "The item {item_id} is no longer in the queue."
     },
     "unknown_player": {
       "message": "The media player {entity_id} does not exist."
+    },
+    "unknown_playlist": {
+      "message": "There is no playlist \"{playlist}\"."
     }
   },
   "selector": {

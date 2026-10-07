@@ -22,11 +22,23 @@
     "invalid_index": {
       "message": "Er is geen item {index} in de wachtrij ({count} items)."
     },
+    "invalid_name": {
+      "message": "Een afspeellijstnaam is 1 tot {max} tekens lang."
+    },
     "not_loaded": {
       "message": "De integratie mediawachtrij is niet geladen."
     },
     "nothing_to_add": {
       "message": "\"{item}\" bevat niets dat afgespeeld kan worden."
+    },
+    "playlist_empty": {
+      "message": "Een lege wachtrij kan niet als afspeellijst bewaard worden."
+    },
+    "playlist_exists": {
+      "message": "Er bestaat al een afspeellijst \"{name}\"."
+    },
+    "playlist_too_long": {
+      "message": "Een afspeellijst bevat hoogstens {limit} items."
     },
     "queue_empty": {
       "message": "De wachtrij is leeg."
@@ -34,11 +46,17 @@
     "queue_full": {
       "message": "De wachtrij is vol ({limit} items)."
     },
+    "too_many_playlists": {
+      "message": "De bibliotheek bevat hoogstens {limit} afspeellijsten."
+    },
     "unknown_item": {
       "message": "Het item {item_id} staat niet meer in de wachtrij."
     },
     "unknown_player": {
       "message": "De mediaspeler {entity_id} bestaat niet."
+    },
+    "unknown_playlist": {
+      "message": "Er is geen afspeellijst \"{playlist}\"."
     }
   },
   "selector": {

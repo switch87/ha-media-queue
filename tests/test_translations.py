@@ -48,7 +48,8 @@ def test_every_exception_key_is_translated() -> None:
         key
         for source in COMPONENT.glob("*.py")
         for key in re.findall(
-            r'translation_key="([a-z_]+)"', source.read_text(encoding="utf-8")
+            r'(?:translation_key=|_invalid\()"([a-z_]+)"',
+            source.read_text(encoding="utf-8"),
         )
     }
     assert used == set(_load("strings.json")["exceptions"])
