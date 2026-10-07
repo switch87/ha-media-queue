@@ -12,7 +12,7 @@ async def test_manifest(hass: HomeAssistant) -> None:
 
     assert str(integration.version) == "0.1.0"
     assert integration.config_flow is True
-    assert integration.iot_class == "local_push"
+    assert integration.iot_class == "calculated"
     assert integration.manifest["single_config_entry"] is True
     assert integration.requirements == []
     assert set(integration.dependencies) >= {

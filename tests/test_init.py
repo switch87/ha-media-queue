@@ -99,3 +99,16 @@ async def test_yaml_is_not_supported(hass: HomeAssistant) -> None:
     """Setting up from configuration.yaml alone creates nothing."""
     assert await async_setup_component(hass, DOMAIN, {})
     assert "media-queue" not in hass.data.get(DATA_PANELS, {})
+
+
+async def test_removing_the_entry_deletes_the_queues(
+    hass: HomeAssistant, hass_storage: dict[str, Any]
+) -> None:
+    """Removing the integration leaves no stored queues behind."""
+    entry = await _setup(hass)
+    controller = entry.runtime_data.controller(PLAYER)
+    controller.queue.add([track("a")], Mode.ADD, limit=10)
+    controller.async_changed()
+    assert await hass.config_entries.async_remove(entry.entry_id)
+    await hass.async_block_till_done()
+    assert STORAGE_KEY not in hass_storage

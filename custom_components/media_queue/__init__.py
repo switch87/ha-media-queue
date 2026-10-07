@@ -5,10 +5,11 @@ from __future__ import annotations
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers.storage import Store
 from homeassistant.helpers.typing import ConfigType
 
 from . import panel, services, websocket
-from .const import DOMAIN
+from .const import DOMAIN, STORAGE_KEY, STORAGE_VERSION
 from .manager import QueueManager
 
 type MediaQueueConfigEntry = ConfigEntry[QueueManager]
@@ -37,3 +38,8 @@ async def async_unload_entry(hass: HomeAssistant, entry: MediaQueueConfigEntry) 
     panel.async_unregister(hass)
     await entry.runtime_data.async_unload()
     return True
+
+
+async def async_remove_entry(hass: HomeAssistant, entry: MediaQueueConfigEntry) -> None:
+    """Delete the stored queues when the integration is removed."""
+    await Store[dict[str, object]](hass, STORAGE_VERSION, STORAGE_KEY).async_remove()
