@@ -1,0 +1,9 @@
+{
+  "name": "ha-media-queue-frontend-tests",
+  "private": true,
+  "type": "module",
+  "description": "Tests for the panel's logic modules; no dependencies, no build step.",
+  "scripts": {
+    "test": "node --test --experimental-test-coverage --test-coverage-include='custom_components/media_queue/frontend/lib/**' --test-coverage-lines=100 --test-coverage-branches=100 --test-coverage-functions=100 'tests/frontend/*.test.mjs'"
+  }
+}
