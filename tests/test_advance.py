@@ -731,3 +731,21 @@ async def test_watchdog_after_the_item_was_removed(
     assert controller.snapshot()["last_error"]["title"] == ""
     assert log.played[-1] == "c.mp3"
     await manager.async_unload()
+
+
+async def test_position_from_before_our_play_is_ignored(
+    hass: HomeAssistant, log: PlayerLog, freezer: FrozenDateTimeFactory
+) -> None:
+    """A position timestamp older than our play (the demo player) is not ours."""
+    started_long_ago = dt_util.utcnow()
+    freezer.tick(timedelta(hours=1))
+    log.on_play = lambda call: playing(
+        hass, "new", media_position=45, media_position_updated_at=started_long_ago
+    )
+    manager = await _started(hass, "a", "b")
+    freezer.tick(timedelta(seconds=30))
+    keep(hass, "idle")  # 30 s played of 200: a stop, not the end
+    await hass.async_block_till_done()
+    assert len(log.calls) == 1
+    assert _phase(manager.controller(PLAYER)) is Phase.STOPPED
+    await manager.async_unload()

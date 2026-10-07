@@ -462,11 +462,14 @@ class QueueController:
         if not duration:
             return False  # streams and unknown lengths never end by themselves
         position = _number(old.attributes.get(ATTR_MEDIA_POSITION))
+        updated = _datetime(old.attributes.get(ATTR_MEDIA_POSITION_UPDATED_AT))
+        if updated is not None and updated < self._call_started:
+            position = None  # reported before we started this item: not about it
         if position is None:
             if self._playing_since is None:
                 return False
             position = self._played + (at - self._playing_since).total_seconds()
-        elif updated := _datetime(old.attributes.get(ATTR_MEDIA_POSITION_UPDATED_AT)):
+        elif updated is not None:
             position += (at - updated).total_seconds()
         return position >= duration - END_TOLERANCE
 
