@@ -73,6 +73,8 @@ async def test_get_empty(client: Client) -> None:
         "items": [],
         "current": None,
         "next": None,
+        "shuffle": False,
+        "repeat": "off",
         "phase": "idle",
         "last_error": None,
     }

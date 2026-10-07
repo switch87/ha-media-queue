@@ -44,7 +44,7 @@ from homeassistant.util import dt as dt_util
 
 from .const import DOMAIN, QUEUE_LIMIT
 from .expand import AddRequest, async_expand
-from .model import Mode, Queue, QueueItem
+from .model import Mode, Queue, QueueItem, Repeat
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -226,9 +226,11 @@ class QueueController:
         async with self._lock:
             index = self.queue.next_position
             if index >= len(self.queue.items):
-                raise ServiceValidationError(
-                    translation_domain=DOMAIN, translation_key="end_of_queue"
-                )
+                if self.queue.repeat is not Repeat.ALL or not self.queue.items:
+                    raise ServiceValidationError(
+                        translation_domain=DOMAIN, translation_key="end_of_queue"
+                    )
+                index = self._wrap()
             self._failures = 0
             await self._play(index, context)
 
@@ -263,6 +265,19 @@ class QueueController:
         """Remove every item; a playing item plays on, then the queue stops."""
         self.queue.clear()
         self.async_changed()
+
+    @callback
+    def set_shuffle(self, on: bool) -> None:
+        """Play in order or shuffled (the current item stays current)."""
+        if self.queue.set_shuffle(on):
+            self.async_changed()
+
+    @callback
+    def set_repeat(self, repeat: Repeat) -> None:
+        """Repeat nothing, the whole queue or the current item."""
+        if repeat is not self.queue.repeat:
+            self.queue.repeat = repeat
+            self.async_changed()
 
     def resolve(self, item_id: str | None, index: int | None) -> int:
         """Return the position of an item named by id (preferred) or index."""
@@ -353,11 +368,11 @@ class QueueController:
             context=context,
         )
 
-    async def _advance(self) -> None:
-        """Play the next item after a natural end, skipping failing items."""
+    async def _advance(self, repeat_current: bool) -> None:
+        """Play what follows a natural end, skipping failing items."""
         async with self._lock:
-            index = self.queue.next_position
-            while index < len(self.queue.items) and self._failures < MAX_SKIPS:
+            index = self._following(repeat_current)
+            while index is not None and self._failures < MAX_SKIPS:
                 try:
                     await self._play(index)
                 except HomeAssistantError as err:
@@ -365,12 +380,39 @@ class QueueController:
                         "%s: skipping item %s: %s", self.entity_id, index, err
                     )
                     self._failures += 1
-                    index += 1
+                    index = self._after(index)
                 else:
                     return
             self.phase = Phase.IDLE
             self.fingerprint = None
             self.async_changed(Change.PLAYBACK)
+
+    def _following(self, repeat_current: bool) -> int | None:
+        """Return the item that plays after the current one ends by itself."""
+        current = self.queue.current
+        if repeat_current and self.queue.repeat is Repeat.ONE and current is not None:
+            return current
+        index = self.queue.next_position
+        if index < len(self.queue.items):
+            return index
+        if self.queue.repeat is Repeat.ALL and self.queue.items:
+            return self._wrap()
+        return None
+
+    def _after(self, index: int) -> int | None:
+        """Return the item to try after index failed (wrapping for repeat all)."""
+        if index + 1 < len(self.queue.items):
+            return index + 1
+        return 0 if self.queue.repeat is Repeat.ALL else None
+
+    def _wrap(self) -> int:
+        """Start the queue again at the top, mixed again when shuffled."""
+        current = self.queue.current
+        avoid = self.queue.items[current].item_id if current is not None else None
+        self.queue.rewind(avoid)
+        if self.queue.shuffle:
+            self.async_changed()
+        return 0
 
     @callback
     def _starting_timed_out(self, _now: datetime) -> None:
@@ -380,12 +422,12 @@ class QueueController:
         item = self.queue.items[current] if current is not None else None
         self._failures += 1
         self._error("did_not_start", item, "")
-        self._schedule_advance()
+        self._schedule_advance(repeat_current=False)
 
-    def _schedule_advance(self) -> None:
+    def _schedule_advance(self, *, repeat_current: bool) -> None:
         self.phase = Phase.STARTING  # until _advance has the lock
         task = self.hass.async_create_background_task(
-            self._advance(), f"{DOMAIN} advance {self.entity_id}"
+            self._advance(repeat_current), f"{DOMAIN} advance {self.entity_id}"
         )
         self._tasks.add(task)
         task.add_done_callback(self._tasks.discard)
@@ -444,7 +486,7 @@ class QueueController:
             return  # unavailable, buffering, …: wait and see
         at = new.last_changed
         if self._ended(old, at):
-            self._schedule_advance()
+            self._schedule_advance(repeat_current=True)
             return
         if self._playing_since is not None:
             self._played += (at - self._playing_since).total_seconds()
@@ -527,12 +569,11 @@ class QueueController:
 
     def playback(self) -> dict[str, Any]:
         """Return the small update for playback-only changes."""
-        upcoming = self.queue.next_position
         return {
             "entity_id": self.entity_id,
             "playback": True,
             "current": self.queue.current,
-            "next": upcoming if upcoming < len(self.queue.items) else None,
+            "next": self.queue.upcoming,
             "phase": self.phase.value,
             "last_error": self.last_error,
         }
@@ -575,12 +616,13 @@ def snapshot(
     last_error: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """Return what the panel needs to show a queue."""
-    upcoming = queue.next_position
     return {
         "entity_id": entity_id,
         "items": [item.as_dict() for item in queue.items],
         "current": queue.current,
-        "next": upcoming if upcoming < len(queue.items) else None,
+        "next": queue.upcoming,
+        "shuffle": queue.shuffle,
+        "repeat": queue.repeat.value,
         "phase": phase.value,
         "last_error": last_error,
     }

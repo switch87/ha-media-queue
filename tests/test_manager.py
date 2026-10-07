@@ -196,6 +196,8 @@ async def test_subscribers_get_snapshots(hass: HomeAssistant) -> None:
             "items": [_item("a").as_dict()],
             "current": None,
             "next": 0,
+            "shuffle": False,
+            "repeat": "off",
             "phase": "idle",
             "last_error": None,
         }
@@ -217,6 +219,8 @@ async def test_snapshot_of_unknown_entity(hass: HomeAssistant) -> None:
         "items": [],
         "current": None,
         "next": None,
+        "shuffle": False,
+        "repeat": "off",
         "phase": "idle",
         "last_error": None,
     }
