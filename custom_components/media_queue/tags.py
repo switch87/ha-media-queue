@@ -51,11 +51,15 @@ def _first(tags: Any, key: str) -> str | None:
 def read_tags(path: str) -> Tags | None:
     """Return the tags of the audio file at path, None when there are none."""
     try:
-        if os.path.getsize(path) > MAX_FILE_SIZE:
-            return None
-        audio = mutagen.File(path, easy=True)
+        return _read(path)
     except Exception:  # broken files raise all kinds of errors
         return None
+
+
+def _read(path: str) -> Tags | None:
+    if os.path.getsize(path) > MAX_FILE_SIZE:
+        return None
+    audio = mutagen.File(path, easy=True)
     if audio is None:
         return None
     length = getattr(audio.info, "length", None)

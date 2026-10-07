@@ -93,6 +93,19 @@ def test_zero_length_is_unknown(tmp_path: Path) -> None:
     assert found == Tags(title="T", artist=None, album=None, duration=None)
 
 
+def test_broken_tags_after_opening(tmp_path: Path) -> None:
+    """Errors while reading the parsed tags are a file without tags too."""
+    path = write_mp3(tmp_path / "a.mp3", title="T")
+
+    class Broken(dict[str, list[str]]):
+        def get(self, key: str, default: Any = None) -> Any:
+            raise ValueError(key)
+
+    fake = SimpleNamespace(info=SimpleNamespace(length=3), tags=Broken())
+    with patch("custom_components.media_queue.tags.mutagen.File", return_value=fake):
+        assert read_tags(str(path)) is None
+
+
 def test_local_file() -> None:
     """Only items of a configured local media folder are read."""
     dirs = {"local": "/media"}
