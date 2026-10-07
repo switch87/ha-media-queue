@@ -213,3 +213,24 @@ async def test_snapshot_of_unknown_entity(hass: HomeAssistant) -> None:
         "last_error": None,
     }
     await manager.async_unload()
+
+
+async def test_unload_closes_subscriptions_and_ignores_late_changes(
+    hass: HomeAssistant, hass_storage: dict[str, Any]
+) -> None:
+    """After unloading, subscribers are told and changes are not saved."""
+    manager = QueueManager(hass)
+    await manager.async_load()
+    closed: list[bool] = []
+    seen: list[dict[str, Any]] = []
+    manager.subscribe(PLAYER, seen.append, lambda: closed.append(True))
+    controller = manager.controller(PLAYER)
+    await manager.async_unload()
+    assert closed == [True]
+
+    controller.queue.add([_item("late")], Mode.ADD, limit=10)
+    controller.async_changed()
+    async_fire_time_changed(hass, dt_util.utcnow() + timedelta(seconds=SAVE_DELAY + 1))
+    await hass.async_block_till_done()
+    assert seen == []
+    assert hass_storage[STORAGE_KEY]["data"] == {"queues": {}}

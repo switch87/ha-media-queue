@@ -75,7 +75,15 @@ def ws_subscribe(
     def forward(data: dict[str, Any]) -> None:
         connection.send_message(event_message(msg["id"], data))
 
-    connection.subscriptions[msg["id"]] = manager.subscribe(entity_id, forward)
+    @callback
+    def closed() -> None:
+        # The entry unloads (reload, removal): the panel subscribes again.
+        connection.subscriptions.pop(msg["id"], None)
+        connection.send_message(
+            event_message(msg["id"], {"entity_id": entity_id, "closed": True})
+        )
+
+    connection.subscriptions[msg["id"]] = manager.subscribe(entity_id, forward, closed)
     connection.send_result(msg["id"])
     forward(manager.snapshot(entity_id))
 

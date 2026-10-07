@@ -193,3 +193,21 @@ async def test_read_only_user(
     assert reply["error"]["code"] == "unauthorized"
     reply = await client.call("clear", entity_id=PLAYER)
     assert reply["error"]["code"] == "unauthorized"
+
+
+async def test_reload_closes_and_resubscribe_works(
+    hass: HomeAssistant, client: Client, entry: MockConfigEntry
+) -> None:
+    """A reload ends the subscription with a closed event; a new one works."""
+    reply = await client.call("subscribe", entity_id=PLAYER)
+    subscription = reply["id"]
+    await client.ws.receive_json()  # the initial snapshot
+    assert await hass.config_entries.async_reload(entry.entry_id)
+    event = await client.ws.receive_json(timeout=5)
+    assert event["id"] == subscription
+    assert event["event"] == {"entity_id": PLAYER, "closed": True}
+
+    reply = await client.call("subscribe", entity_id=PLAYER)
+    assert reply["success"]
+    await client.call("add", entity_id=PLAYER, mode="add", **FOLDER)
+    assert client.events[-1]["id"] == reply["id"]

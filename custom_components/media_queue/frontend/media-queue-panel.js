@@ -133,6 +133,7 @@ class MediaQueuePanel extends HTMLElement {
   set route(_route) {}
 
   disconnectedCallback() {
+    clearTimeout(this._retryTimer);
     this._stopSubscription();
   }
 
@@ -284,6 +285,12 @@ class MediaQueuePanel extends HTMLElement {
     this._unsubscribe = this._hass.connection.subscribeMessage(
       (snapshot) => {
         if (snapshot.entity_id !== this._entityId) return;
+        if (snapshot.closed) {
+          // The integration reloaded: subscribe again shortly.
+          this._unsubscribe = null;
+          this._retry(2000);
+          return;
+        }
         const error = newError(this._lastErrorAt, snapshot, this._snapshot === null);
         this._lastErrorAt = snapshot.last_error?.at ?? null;
         if (error) this._notify(errorText((key, params) => this.t(key, params), error));
@@ -293,7 +300,18 @@ class MediaQueuePanel extends HTMLElement {
       },
       { type: "media_queue/subscribe", entity_id: entityId },
     );
-    this._unsubscribe.catch((err) => this._notify(this.t("error", { message: err.message ?? err.code })));
+    this._unsubscribe.catch((err) => {
+      if (this._unsubscribe) this._notify(this.t("error", { message: err.message ?? err.code }));
+      this._unsubscribe = null;
+      this._retry(5000);
+    });
+  }
+
+  _retry(delay) {
+    clearTimeout(this._retryTimer);
+    this._retryTimer = setTimeout(() => {
+      if (this.isConnected && this._entityId && !this._unsubscribe) this._subscribe();
+    }, delay);
   }
 
   // ---------------------------------------------------------------- library

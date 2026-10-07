@@ -15,6 +15,7 @@ from .controller import Phase, QueueController, snapshot
 from .model import Queue
 
 type Subscriber = Callable[[dict[str, Any]], None]
+type Closer = Callable[[], None]
 
 
 def _is_player(entity_id: Any) -> bool:
@@ -31,7 +32,8 @@ class QueueManager:
         self.hass = hass
         self._store: Store[dict[str, Any]] = Store(hass, STORAGE_VERSION, STORAGE_KEY)
         self._controllers: dict[str, QueueController] = {}
-        self._subscribers: dict[str, list[Subscriber]] = {}
+        self._subscribers: dict[str, list[tuple[Subscriber, Closer | None]]] = {}
+        self._unloaded = False
 
     @property
     def entity_ids(self) -> list[str]:
@@ -53,9 +55,15 @@ class QueueManager:
                 self._controllers[entity_id] = controller
 
     async def async_unload(self) -> None:
-        """Stop following the players and write pending changes now."""
+        """Stop following the players, end subscriptions, save now."""
+        self._unloaded = True
         for controller in self._controllers.values():
             controller.async_stop()
+        for subscribers in self._subscribers.values():
+            for _subscriber, on_close in subscribers:
+                if on_close is not None:
+                    on_close()
+        self._subscribers.clear()
         await self._store.async_save(self._data())
 
     def get(self, entity_id: str) -> QueueController | None:
@@ -78,22 +86,29 @@ class QueueManager:
         return snapshot(entity_id, Queue(), Phase.IDLE)
 
     @callback
-    def subscribe(self, entity_id: str, subscriber: Subscriber) -> CALLBACK_TYPE:
-        """Call subscriber with a snapshot whenever entity_id's queue changes."""
+    def subscribe(
+        self, entity_id: str, subscriber: Subscriber, on_close: Closer | None = None
+    ) -> CALLBACK_TYPE:
+        """Call subscriber whenever entity_id's queue changes; on_close at unload."""
         subscribers = self._subscribers.setdefault(entity_id, [])
-        subscribers.append(subscriber)
+        entry = (subscriber, on_close)
+        subscribers.append(entry)
 
         @callback
         def unsubscribe() -> None:
-            if subscriber in subscribers:
-                subscribers.remove(subscriber)
+            if entry in subscribers:
+                subscribers.remove(entry)
 
         return unsubscribe
 
     @callback
     def _changed(self, controller: QueueController) -> None:
+        if self._unloaded:
+            return  # a late change (an advance being cancelled): not ours anymore
         data = controller.snapshot()
-        for subscriber in list(self._subscribers.get(controller.entity_id, [])):
+        for subscriber, _on_close in list(
+            self._subscribers.get(controller.entity_id, [])
+        ):
             subscriber(data)
         self._store.async_delay_save(self._data, SAVE_DELAY)
 
