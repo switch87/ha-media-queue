@@ -145,6 +145,9 @@ async def test_changes_are_saved_delayed(
                 "items": [_item("a").as_dict()],
                 "current": None,
                 "next": None,
+                "shuffle": False,
+                "repeat": "off",
+                "original": None,
                 "phase": "idle",
                 "fingerprint": None,
             }
