@@ -69,3 +69,16 @@ def test_no_references_in_translations() -> None:
     """Custom integrations get no [%key:…] resolution: every text is written out."""
     for path in (COMPONENT / "translations").glob("*.json"):
         assert "[%key:" not in path.read_text(encoding="utf-8"), path.name
+
+
+def test_every_service_has_an_icon() -> None:
+    """icons.json has an icon for every action (hassfest checks this too)."""
+    services = load_yaml_dict(COMPONENT / "services.yaml")
+    assert set(_load("icons.json")["services"]) == set(services)
+
+
+def test_manifest_keys_in_hassfest_order() -> None:
+    """domain and name first, then the other keys alphabetically."""
+    keys = list(_load("manifest.json"))
+    assert keys[:2] == ["domain", "name"]
+    assert keys[2:] == sorted(keys[2:])
