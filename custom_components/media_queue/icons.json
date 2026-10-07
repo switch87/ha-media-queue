@@ -1,0 +1,12 @@
+{
+  "services": {
+    "add": { "service": "mdi:playlist-plus" },
+    "play_index": { "service": "mdi:play" },
+    "next": { "service": "mdi:skip-next" },
+    "previous": { "service": "mdi:skip-previous" },
+    "remove": { "service": "mdi:playlist-remove" },
+    "move": { "service": "mdi:swap-vertical" },
+    "clear": { "service": "mdi:playlist-remove" },
+    "get_queue": { "service": "mdi:playlist-music" }
+  }
+}

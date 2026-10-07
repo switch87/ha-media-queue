@@ -7,7 +7,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.typing import ConfigType
 
-from . import panel, websocket
+from . import panel, services, websocket
 from .const import DOMAIN
 from .manager import QueueManager
 
@@ -19,6 +19,7 @@ CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     """Register the API (it needs a loaded entry to do anything)."""
     websocket.async_register(hass)
+    services.async_register(hass)
     return True
 
 
