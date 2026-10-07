@@ -8,7 +8,14 @@ import { listPlayers, playersKey } from "./lib/players.js";
 import { limiter } from "./lib/limiter.js";
 import { applyUpdate, errorText, idsKey, newError, queueRows } from "./lib/queue-view.js";
 import { dropIndex, rowAt } from "./lib/reorder.js";
-import { nowPlaying, playPauseAction, queueButtons, volumeOf } from "./lib/transport.js";
+import {
+  nowPlaying,
+  playPauseAction,
+  queueButtons,
+  repeatButton,
+  shuffleButton,
+  volumeOf,
+} from "./lib/transport.js";
 
 const STYLE = `
   :host { display: block; height: 100%; background: var(--primary-background-color); color: var(--primary-text-color);
@@ -34,6 +41,8 @@ const STYLE = `
   .now .t { font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .now .s { color: var(--secondary-text-color); font-size: 0.9em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .now .main { background: var(--primary-color); color: var(--text-primary-color, white); padding: 10px; }
+  .now .mode { color: var(--secondary-text-color); }
+  .now .mode[aria-pressed="true"] { color: var(--primary-color); }
   .now input[type=range] { width: 120px; accent-color: var(--primary-color); }
   .narrow .now { flex-wrap: wrap; row-gap: 4px; }
   .narrow .now .info { flex: 1 1 calc(100% - 64px); }
@@ -196,6 +205,7 @@ class MediaQueuePanel extends HTMLElement {
       { title: this.t("clear"), "aria-label": this.t("clear"), onclick: () => this._call({ type: "media_queue/clear" }) },
       icon("mdi:playlist-remove"),
     );
+    this._queueNote = h("div", { class: "note", hidden: true }, this.t("shuffled"));
     this._queueList = h("ul");
     this._toast = h("div", { class: "toast", role: "status" });
     this._tabButtons = {
@@ -228,6 +238,7 @@ class MediaQueuePanel extends HTMLElement {
           "section",
           { class: "queue" },
           h("div", { class: "head" }, h("span", { class: "label" }, this.t("queue")), this._queueCount, this._clearButton),
+          this._queueNote,
           this._queueList,
         ),
       ),
@@ -482,6 +493,7 @@ class MediaQueuePanel extends HTMLElement {
     const rows = queueRows(this._snapshot);
     this._queueCount.textContent = this.t("items", { count: rows.length });
     this._clearButton.disabled = rows.length === 0;
+    this._queueNote.hidden = !(this._snapshot?.shuffle && rows.length);
     if (this._dragging) return;
     const key = idsKey(rows);
     if (key === this._idsKey && rows.length) {
@@ -497,7 +509,6 @@ class MediaQueuePanel extends HTMLElement {
       this._queueList.replaceChildren(h("li", { class: "empty" }, this.t("empty_queue")));
       return;
     }
-    const items = this._snapshot.items;
     this._queueList.replaceChildren(
       ...rows.map((row) =>
         h(
@@ -518,16 +529,17 @@ class MediaQueuePanel extends HTMLElement {
             "button",
             {
               class: "title link",
-              title: `${this.t("play")}: ${items[row.index].title}`,
+              title: row.tooltip,
+              "aria-label": `${this.t("play")}: ${row.label}`,
               onclick: () => this._call({ type: "media_queue/play_index", item_id: row.id }),
             },
-            row.title,
+            row.label,
           ),
           h(
             "button",
             {
               title: this.t("remove"),
-              "aria-label": `${this.t("remove")}: ${row.title}`,
+              "aria-label": `${this.t("remove")}: ${row.label}`,
               onclick: () => this._call({ type: "media_queue/remove", item_id: row.id }),
             },
             icon("mdi:close"),
@@ -585,6 +597,8 @@ class MediaQueuePanel extends HTMLElement {
     const action = playPauseAction(stateObj, this._snapshot);
     const buttons = queueButtons(this._snapshot);
     const volume = volumeOf(stateObj);
+    const shuffle = shuffleButton(this._snapshot);
+    const repeat = repeatButton(this._snapshot);
     const fallback = () => h("span", { class: "art" }, icon("mdi:music"));
     const art = info.picture ? h("img", { alt: "", onerror: () => art.replaceWith(fallback()) }) : fallback();
     if (info.picture) this._sign(info.picture).then((src) => (art.src = src));
@@ -595,6 +609,18 @@ class MediaQueuePanel extends HTMLElement {
         { class: "info" },
         h("div", { class: "t" }, info.title ?? this.t("nothing_playing")),
         h("div", { class: "s" }, info.subtitle),
+      ),
+      h(
+        "button",
+        {
+          class: "mode",
+          title: this.t(shuffle.title),
+          "aria-label": this.t("shuffle"),
+          "aria-pressed": String(shuffle.pressed),
+          disabled: !this._entityId,
+          onclick: () => this._call({ type: "media_queue/set_shuffle", shuffle: shuffle.value }),
+        },
+        icon(shuffle.icon),
       ),
       h(
         "button",
@@ -626,6 +652,18 @@ class MediaQueuePanel extends HTMLElement {
           onclick: () => this._call({ type: "media_queue/next" }),
         },
         icon("mdi:skip-next"),
+      ),
+      h(
+        "button",
+        {
+          class: "mode",
+          title: this.t(repeat.title),
+          "aria-label": this.t(repeat.title),
+          "aria-pressed": String(repeat.pressed),
+          disabled: !this._entityId,
+          onclick: () => this._call({ type: "media_queue/set_repeat", repeat: repeat.value }),
+        },
+        icon(repeat.icon),
       ),
       volume !== null &&
         h("input", {
