@@ -47,7 +47,12 @@ position, from the time it played). Things that are *not* an end:
 - the player playing something else (another media id): the queue stops
   following it until you play from the queue again.
 
-Items that fail to play during advancing are skipped (at most 3 in a row).
+Durations and positions reported as text (MPD) are understood; positions
+reported before the item was started are ignored.
+
+Items that fail to play during advancing are skipped (at most 3 in a row), as
+are items the player accepts but does not start within 25 s (a URL it cannot
+fetch, a format it cannot play). The panel shows these errors.
 
 ## What the players themselves do with each item
 
@@ -75,19 +80,24 @@ The queue plays one item at a time with a plain `media_player.play_media`
 `mode`: replace/add/next/play, `title`), `media_queue.play_index`,
 `media_queue.next`, `media_queue.previous`, `media_queue.remove`,
 `media_queue.move`, `media_queue.clear`, and `media_queue.get_queue` (returns
-the queue). Users who may not control a player cannot change its queue.
+the queue). `play_index`, `remove` and `move` take an `item_id` (from
+`get_queue`) or a position. Users who may not control a player cannot change
+its queue; players that do not exist are refused (only `add` creates a queue).
 
 ## Websocket API (used by the panel)
 
 `media_queue/get`, `media_queue/subscribe`, `media_queue/add`,
 `media_queue/play_index`, `media_queue/remove`, `media_queue/move`,
 `media_queue/clear`, `media_queue/next`, `media_queue/previous`; all take
-`entity_id`.
+`entity_id`; items are named by `item_id` (the index is a fallback). The
+subscription sends a full snapshot when the items change and a small
+`{"playback": true, current, next, phase, last_error}` update when only
+playback changes; `{"closed": true}` when the integration unloads.
 
 ## Remove
 
-Delete the integration entry, remove `custom_components/media_queue` and
-`.storage/media_queue`, restart.
+Delete the integration entry (this also deletes `.storage/media_queue`),
+remove `custom_components/media_queue`, restart.
 
 ## Development
 
