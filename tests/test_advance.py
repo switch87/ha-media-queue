@@ -542,3 +542,57 @@ async def test_unload_cancels_a_pending_advance(
     release.set()
     await hass.async_block_till_done()
     assert _phase(manager.controller(PLAYER)) is Phase.STARTING
+
+
+async def test_mpd_reports_strings_and_polls(
+    hass: HomeAssistant, log: PlayerLog, freezer: FrozenDateTimeFactory
+) -> None:
+    """MPD: duration as text, position polled every 10 s, off at the end."""
+
+    def mpd_plays(call: ServiceCall) -> None:
+        state(
+            hass,
+            "playing",
+            call.data["media_content_id"],
+            media_duration="200.493",
+            media_position=0,
+            media_position_updated_at=dt_util.utcnow(),
+        )
+
+    log.on_play = mpd_plays
+    manager = await _started(hass, "a", "b")
+    controller = manager.controller(PLAYER)
+    first = log.calls[0].data["media_content_id"]
+    for position in range(10, 200, 10):  # one poll every 10 s
+        freezer.tick(timedelta(seconds=10))
+        state(
+            hass,
+            "playing",
+            first,
+            media_duration="200.493",
+            media_position=position,
+            media_position_updated_at=dt_util.utcnow(),
+        )
+        await hass.async_block_till_done()
+    assert len(log.calls) == 1
+    freezer.tick(timedelta(seconds=10))
+    hass.states.async_set(PLAYER, "off", {})  # stopped: MPD forgets the song
+    await hass.async_block_till_done()
+    assert log.played == ["a.mp3", "b.mp3"]
+    assert _phase(controller) is Phase.PLAYING
+    await manager.async_unload()
+
+
+@pytest.mark.parametrize("duration", ["abc", "nan", "inf", "-inf", ""])
+async def test_unusable_text_duration_is_unknown(
+    hass: HomeAssistant,
+    log: PlayerLog,
+    freezer: FrozenDateTimeFactory,
+    duration: str,
+) -> None:
+    """Text that is no finite number counts as an unknown duration."""
+    log.on_play = lambda call: playing(hass, "x", media_duration=duration)
+    manager = await _started(hass, "a", "b")
+    await _end(hass, freezer)
+    assert len(log.calls) == 1
+    await manager.async_unload()

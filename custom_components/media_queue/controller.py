@@ -7,6 +7,7 @@ from collections.abc import Callable
 from datetime import datetime
 from enum import StrEnum
 import logging
+import math
 from typing import Any
 
 from homeassistant.components import media_source
@@ -76,9 +77,14 @@ _RESTORED_PHASES = {Phase.PLAYING, Phase.STOPPED}
 
 
 def _number(value: Any) -> float | None:
-    if isinstance(value, bool) or not isinstance(value, int | float):
+    """Return a finite number from a state attribute (MPD reports text)."""
+    if isinstance(value, bool) or not isinstance(value, int | float | str):
         return None
-    return float(value)
+    try:
+        number = float(value)
+    except ValueError:
+        return None
+    return number if math.isfinite(number) else None
 
 
 def _datetime(value: Any) -> datetime | None:
