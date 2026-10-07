@@ -14,6 +14,16 @@ DLNA, …), the queue on the right, transport controls on top.
 - Players stay normal entities: pause and volume go to the player itself;
   previous/next go through the queue.
 - Queues survive a restart (stored in `.storage/media_queue`).
+- **Playlists** (`.m3u`, `.m3u8`, `.pls` on the local media source): adding a
+  playlist queues its entries in order, with the `#EXTINF`/`TitleN` titles.
+  Entries are relative to the playlist's folder (absolute paths inside the
+  media folder work too; backslashes, UTF-8 with or without BOM and Latin-1
+  are understood); `http(s)` URLs become items; entries outside the media
+  folder and missing files are skipped. When a *folder* is added, playlist
+  files in it are skipped (their tracks are in the folder already).
+- The play/next/add buttons appear only for audio: not on the media-source
+  roots, nor on cameras, images, image uploads, text-to-speech, AI tasks,
+  pictures or videos (those can still be browsed).
 - English and Dutch; on a phone the library and the queue are tabs.
 
 Screenshots: `docs/screenshots/`.
@@ -42,8 +52,9 @@ position, from the time it played). Things that are *not* an end:
 
 - a stop or pause before the end (someone pressed stop in another app or card):
   the queue waits; pressing play on the player continues following it;
-- items without a duration (radio, streams): they never end by themselves; use
-  next;
+- items without a duration (radio, streams): they never end by themselves, on
+  purpose (Gert, 2026-10-07): a stop of the radio elsewhere must never start
+  the next item. Press next to go on;
 - the player playing something else (another media id): the queue stops
   following it until you play from the queue again.
 
