@@ -78,7 +78,7 @@ def test_every_service_has_an_icon() -> None:
 
 
 def test_manifest_keys_in_hassfest_order() -> None:
-    """domain and name first, then the other keys alphabetically."""
+    """The manifest starts with domain and name; the other keys are sorted."""
     keys = list(_load("manifest.json"))
     assert keys[:2] == ["domain", "name"]
     assert keys[2:] == sorted(keys[2:])
