@@ -112,3 +112,31 @@ test("local media is listed in natural order, folders first; others as given", (
   assert.deepEqual(sortedChildren(sonos, children), children);
   assert.deepEqual(sortedChildren(null, children), children);
 });
+
+test("queue actions only for audio: not on non-audio sources, images, video or app roots", () => {
+  const none = { open: true, play: false, next: false, add: false };
+  const folder = (id, extra = {}) => ({ media_content_id: id, can_expand: true, can_play: false, media_class: "directory", media_content_type: "", ...extra });
+  for (const id of [
+    "media-source://camera",
+    "media-source://camera/camera.door",
+    "media-source://image",
+    "media-source://image_upload/x",
+    "media-source://tts",
+    "media-source://ai_task/x",
+  ]) {
+    assert.deepEqual(itemActions(folder(id)), none, id);
+  }
+  assert.deepEqual(itemActions(folder("media-source://media_source", { media_class: "app", media_content_type: "app" })), none);
+  assert.deepEqual(
+    itemActions({ media_content_id: "media-source://media_source/local/x.mp4", can_play: true, can_expand: false, media_class: "video", media_content_type: "video/mp4" }),
+    { open: false, play: false, next: false, add: false },
+  );
+  assert.deepEqual(
+    itemActions({ media_content_id: "x.jpg", can_play: true, can_expand: false, media_class: "image", media_content_type: "image/jpeg" }),
+    { open: false, play: false, next: false, add: false },
+  );
+  assert.equal(itemActions({ media_content_id: "x", can_play: true, media_class: "music", media_content_type: "video/mp4" }).play, false);
+  assert.equal(itemActions(folder("media-source://cameras_and_more")).play, true);
+  assert.equal(itemActions(folder("media-source://media_source/local/Yeti")).play, true);
+  assert.equal(itemActions({ media_content_id: "A:ALBUM/Yeti", can_play: true, can_expand: true, media_class: "album", media_content_type: "album" }).add, true);
+});

@@ -1,8 +1,22 @@
 // What the library can do with a browse item, and the messages it sends.
 
-/** Return which buttons a browse item gets. */
+// Media sources without music, and classes/types that are no audio.
+const NON_AUDIO_SOURCES = ["camera", "image", "image_upload", "tts", "ai_task"];
+const NON_AUDIO_CLASSES = new Set(["image", "video", "movie", "episode", "tv_show", "season", "app"]);
+
+/** Return whether queue actions make sense for an item (audio only). */
+export function isAudio(item) {
+  const id = item.media_content_id ?? "";
+  if (NON_AUDIO_SOURCES.some((source) => id === `media-source://${source}` || id.startsWith(`media-source://${source}/`))) {
+    return false;
+  }
+  const type = item.media_content_type ?? "";
+  return !NON_AUDIO_CLASSES.has(item.media_class) && !/^(image|video)\//.test(type) && type !== "app";
+}
+
+/** Return which buttons a browse item gets (queue actions only for audio). */
 export function itemActions(item) {
-  const queueable = Boolean(item.can_play || item.can_expand);
+  const queueable = Boolean(item.can_play || item.can_expand) && isAudio(item);
   return {
     open: Boolean(item.can_expand),
     play: queueable,
