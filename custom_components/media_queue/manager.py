@@ -7,9 +7,10 @@ from typing import Any
 
 from homeassistant.const import Platform
 from homeassistant.core import CALLBACK_TYPE, HomeAssistant, callback
+from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers.storage import Store
 
-from .const import SAVE_DELAY, STORAGE_KEY, STORAGE_VERSION
+from .const import DOMAIN, SAVE_DELAY, STORAGE_KEY, STORAGE_VERSION
 from .controller import Phase, QueueController, snapshot
 from .model import Queue
 
@@ -104,3 +105,14 @@ class QueueManager:
                 if controller.queue.items or controller.phase is not Phase.IDLE
             }
         }
+
+
+def async_get_manager(hass: HomeAssistant) -> QueueManager:
+    """Return the manager of the loaded config entry."""
+    entries = hass.config_entries.async_loaded_entries(DOMAIN)
+    if not entries:
+        raise ServiceValidationError(
+            translation_domain=DOMAIN, translation_key="not_loaded"
+        )
+    manager: QueueManager = entries[0].runtime_data
+    return manager
