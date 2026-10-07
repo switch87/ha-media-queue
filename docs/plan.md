@@ -228,3 +228,39 @@ line + branch, mypy --strict, ruff, node tests at 100 % for `frontend/lib`.
     nl/en labels), "shuffled" note on the queue header.
 22. **Release docs**: manifest 0.2.0, README, CHANGELOG.md.
 23. **e2e** on the dev HA with tagged test files; screenshots.
+
+## e2e 0.2.0 (dev HA 2026.9.4 on gaia, 127.0.0.1:8124, demo players)
+
+Test library: `scripts/make_dev_library.py ~/Workspace/ha-dev/lib` (Yeti: 7
+tagged tracks, Night Owls: 4). Player: `media_player.living_room` (demo).
+Ends of items were simulated through the REST state API (playing near the end,
+then idle); no real speakers.
+
+- Storage migration: the 0.1.0 store (1.1, one queue) was rewritten as 1.2 with
+  `shuffle: false`, `repeat: "off"` at the first start of 0.2.0.
+- Tags: ▶ on the Yeti folder → 7 rows with file names, within a second
+  "Soap Shop Rock – Amon Düül II" … with album and duration; file name as
+  tooltip, "Play: title – artist" as accessible name.
+- Shuffle on with Cerberus (3rd) playing → Cerberus on top, still current, the
+  rest mixed, note "Shuffled: the queue is shown in play order."; shuffle off →
+  album order, Cerberus current at 3; no play_media call on either toggle.
+- Repeat all + shuffle, last item ends → queue mixed anew, the item that just
+  ended not first, the new first item plays. Repeat all in order → item 0
+  plays after the last.
+- Repeat one, item ends → the same item is played again, current unchanged.
+- Repeat button cycles all → one → off → all (icons and `aria-pressed`
+  checked in the DOM).
+- Add (➕) of Night Owls while shuffled → the 4 tracks mixed into the part
+  after the current item, tags read.
+- Restart of the dev HA → order, current, shuffle, repeat and tag titles the
+  same; shuffle off after the restart still restores the album order.
+- Phone width: transport wraps (shuffle, previous, play, next, repeat on one
+  row, volume below), queue tab shows the shuffled note.
+- Screenshots: `docs/screenshots/panel-shuffle-repeat-tags-en.jpg`,
+  `docs/screenshots/panel-phone-queue-shuffle-en.jpg`.
+
+Per-file cost of the tags (gaia, local SSD, warm): 0.1–0.5 ms, ~20 small reads
+and ~10 seeks, 0.7 kB read for an MP3 and 8.6 kB for a FLAC (first call in a
+process ~36 ms: mutagen's lazy imports). On the Pi over CIFS each file costs
+some network round trips (estimate a few ms to ~20 ms), which is why tags are
+read after the add, in the background.
