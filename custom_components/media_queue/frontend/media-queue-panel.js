@@ -3,6 +3,20 @@
 
 import { addMessage, browseMessage, itemActions, needsSigning, sortedChildren, sourceNote } from "./lib/browse-actions.js";
 import { languageOf, translate } from "./lib/i18n.js";
+import {
+  cleanName,
+  deleteMessage,
+  getMessage,
+  isNameTaken,
+  listMessage,
+  loadMessage,
+  nodeActions,
+  playlistNodes,
+  renameMessage,
+  saveMessage,
+  trackNodes,
+  withPlaylistsFolder,
+} from "./lib/playlists.js";
 import { rememberPlayer, restorePlayer } from "./lib/player-memory.js";
 import { listPlayers, playersKey } from "./lib/players.js";
 import { limiter } from "./lib/limiter.js";
@@ -86,6 +100,18 @@ const STYLE = `
     border-radius: 8px; background: var(--primary-text-color); color: var(--primary-background-color); opacity: 0;
     transition: opacity 0.2s; pointer-events: none; z-index: 10; }
   .toast.show { opacity: 0.92; }
+  .dialog-backdrop { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.45); display: flex;
+    align-items: center; justify-content: center; z-index: 20; padding: 16px; }
+  .dialog { background: var(--card-background-color); color: var(--primary-text-color); border-radius: 12px;
+    padding: 20px; width: min(420px, 100%); box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4); }
+  .dialog h2 { margin: 0 0 12px; font-size: 18px; font-weight: 500; }
+  .dialog p { margin: 0 0 12px; }
+  .dialog p.error { color: var(--error-color, #db4437); }
+  .dialog input { width: 100%; font: inherit; padding: 8px 10px; border-radius: 6px; margin-bottom: 12px;
+    border: 1px solid var(--divider-color); background: var(--primary-background-color); color: inherit; }
+  .dialog .buttons { display: flex; justify-content: flex-end; gap: 8px; }
+  .dialog .buttons button { border-radius: 6px; padding: 8px 14px; }
+  .dialog .buttons .confirm { background: var(--primary-color); color: var(--text-primary-color, white); }
 `;
 
 /** Create an element: h("button", {class: "x", onclick: f}, child, …). */
@@ -207,6 +233,11 @@ class MediaQueuePanel extends HTMLElement {
       { title: this.t("clear"), "aria-label": this.t("clear"), onclick: () => this._call({ type: "media_queue/clear" }) },
       icon("mdi:playlist-remove"),
     );
+    this._saveButton = h(
+      "button",
+      { title: this.t("save_playlist"), "aria-label": this.t("save_playlist"), onclick: () => this._savePlaylist() },
+      icon("mdi:content-save"),
+    );
     this._queueNote = h("div", { class: "note", hidden: true }, this.t("shuffled"));
     this._queueList = h("ul");
     this._toast = h("div", { class: "toast", role: "status" });
@@ -239,7 +270,7 @@ class MediaQueuePanel extends HTMLElement {
         h(
           "section",
           { class: "queue" },
-          h("div", { class: "head" }, h("span", { class: "label" }, this.t("queue")), this._queueCount, this._clearButton),
+          h("div", { class: "head" }, h("span", { class: "label" }, this.t("queue")), this._queueCount, this._saveButton, this._clearButton),
           this._queueNote,
           this._queueList,
         ),
@@ -354,7 +385,7 @@ class MediaQueuePanel extends HTMLElement {
     this._listing = "loading";
     this._renderLibrary();
     try {
-      const result = await this._hass.callWS(browseMessage(player.entityId, player.canBrowse, node));
+      const result = await this._list(player, node);
       if (player.entityId !== this._entityId) return;
       if (!back && node) this._stack.push(node);
       if (!node) this._stack = [];
@@ -364,6 +395,23 @@ class MediaQueuePanel extends HTMLElement {
       this._notify(this.t("error", { message: err.message ?? err.code }));
     }
     this._renderLibrary();
+  }
+
+  async _list(player, node) {
+    if (node?.kind === "playlists") {
+      const result = await this._hass.callWS(listMessage());
+      return { title: this.t("playlists"), kind: "playlists", children: playlistNodes(result.playlists) };
+    }
+    if (node?.kind === "playlist") {
+      const playlist = await this._hass.callWS(getMessage(node.playlist_id));
+      return { title: playlist.name, kind: "playlist", children: trackNodes(playlist) };
+    }
+    return this._hass.callWS(browseMessage(player.entityId, player.canBrowse, node));
+  }
+
+  _refreshPlaylists() {
+    const node = this._stack[this._stack.length - 1] ?? null;
+    if (node?.kind) this._openNode(node, true);
   }
 
   _back() {
@@ -397,26 +445,28 @@ class MediaQueuePanel extends HTMLElement {
       this._libraryList.replaceChildren(h("li", { class: "empty" }, this.t("loading")));
       return;
     }
-    const children = sortedChildren(listing, listing?.children ?? []);
+    const children = listing?.kind
+      ? listing.children
+      : withPlaylistsFolder(sortedChildren(listing, listing?.children ?? []), node, this.t("playlists"));
     if (!children.length) {
-      this._libraryList.replaceChildren(h("li", { class: "empty" }, this.t("empty_folder")));
+      const empty = listing?.kind === "playlists" ? "no_playlists" : "empty_folder";
+      this._libraryList.replaceChildren(h("li", { class: "empty" }, this.t(empty)));
       return;
     }
     this._libraryList.replaceChildren(...children.map((item) => this._libraryRow(item)));
   }
 
   _libraryRow(item) {
-    const actions = itemActions(item);
-    const button = (mode, iconName, label) =>
-      h(
-        "button",
-        { title: label, "aria-label": `${label}: ${item.title}`, onclick: () => this._add(item, mode) },
-        icon(iconName),
-      );
+    const own = nodeActions(item);
+    const actions = own ?? itemActions(item);
+    const run = (mode) => (own ? this._load(item, mode) : this._add(item, mode));
+    const button = (iconName, label, onclick) =>
+      h("button", { title: label, "aria-label": `${label}: ${item.title}`, onclick }, icon(iconName));
+    const fallback = item.kind === "playlist" || item.kind === "playlists" ? "mdi:playlist-music" : null;
     return h(
       "li",
       {},
-      this._thumb(item.thumbnail, item.can_expand ? "mdi:folder-music" : "mdi:music-note"),
+      this._thumb(item.thumbnail, fallback ?? (item.can_expand ? "mdi:folder-music" : "mdi:music-note")),
       actions.open
         ? h(
             "button",
@@ -431,11 +481,142 @@ class MediaQueuePanel extends HTMLElement {
       h(
         "span",
         { class: "actions" },
-        actions.play && button("replace", "mdi:play", this.t("play")),
-        actions.next && button("next", "mdi:skip-next", this.t("play_next")),
-        actions.add && button("add", "mdi:playlist-plus", this.t("add")),
+        actions.play && button("mdi:play", this.t("play"), () => run("replace")),
+        actions.next && button("mdi:skip-next", this.t("play_next"), () => run("next")),
+        actions.add && button("mdi:playlist-plus", this.t("add"), () => run("add")),
+        own?.rename && button("mdi:rename", this.t("rename"), (e) => this._renamePlaylist(item, e.currentTarget)),
+        own?.remove && button("mdi:delete", this.t("delete"), (e) => this._deletePlaylist(item, e.currentTarget)),
       ),
     );
+  }
+
+  async _load(node, mode) {
+    try {
+      const result = await this._hass.callWS(loadMessage(this._entityId, node, mode));
+      this._notify(
+        result.truncated ? this.t("truncated", { limit: result.limit }) : this.t("added", { count: result.added }),
+      );
+    } catch (err) {
+      this._notify(this.t("error", { message: err.message ?? err.code }));
+    }
+  }
+
+  // -------------------------------------------------------------- playlists
+
+  async _savePlaylist() {
+    const opener = this._saveButton;
+    const name = await this._dialog({ title: this.t("save_playlist"), input: "", confirm: this.t("save"), opener });
+    if (name === null) return;
+    for (const overwrite of [false, true]) {
+      try {
+        await this._hass.callWS(saveMessage(this._entityId, name, overwrite));
+        this._notify(this.t("saved", { name }));
+        this._refreshPlaylists();
+        return;
+      } catch (err) {
+        if (overwrite || !isNameTaken(err)) {
+          this._notify(this.t("error", { message: err.message ?? err.code }));
+          return;
+        }
+        const sure = await this._dialog({
+          title: this.t("save_playlist"),
+          text: this.t("overwrite_question", { name }),
+          confirm: this.t("overwrite"),
+          opener,
+        });
+        if (sure === null) return;
+      }
+    }
+  }
+
+  async _renamePlaylist(node, opener) {
+    const name = await this._dialog({ title: this.t("rename"), input: node.title, confirm: this.t("rename"), opener });
+    if (name === null) return;
+    try {
+      await this._hass.callWS(renameMessage(node.playlist_id, name));
+      this._notify(this.t("renamed", { name }));
+      this._refreshPlaylists();
+    } catch (err) {
+      this._notify(this.t("error", { message: err.message ?? err.code }));
+    }
+  }
+
+  async _deletePlaylist(node, opener) {
+    const sure = await this._dialog({
+      title: this.t("delete"),
+      text: this.t("delete_question", { name: node.title }),
+      confirm: this.t("delete"),
+      opener,
+    });
+    if (sure === null) return;
+    try {
+      await this._hass.callWS(deleteMessage(node.playlist_id));
+      this._notify(this.t("deleted", { name: node.title }));
+      this._refreshPlaylists();
+    } catch (err) {
+      this._notify(this.t("error", { message: err.message ?? err.code }));
+    }
+  }
+
+  /**
+   * Show a small modal dialog; resolve with the (checked) name for an input
+   * dialog, "" for a confirmation, null when cancelled. Escape cancels; the
+   * focus returns to the opener.
+   */
+  _dialog({ title, text = null, input = null, confirm, opener }) {
+    return new Promise((resolve) => {
+      const titleId = "media-queue-dialog-title";
+      const field =
+        input === null ? null : h("input", { type: "text", value: input, maxLength: 100, "aria-label": this.t("playlist_name") });
+      const message = h("p", { hidden: !text }, text ?? "");
+      const close = (value) => {
+        backdrop.remove();
+        opener?.focus();
+        resolve(value);
+      };
+      const accept = () => {
+        if (!field) return close("");
+        const name = cleanName(field.value);
+        if (name === null) {
+          message.hidden = false;
+          message.className = "error";
+          message.textContent = this.t("invalid_name");
+          field.focus();
+          return;
+        }
+        close(name);
+      };
+      const confirmButton = h("button", { class: "confirm", type: "submit" }, confirm);
+      const form = h(
+        "form",
+        { onsubmit: (e) => (e.preventDefault(), accept()) },
+        h("h2", { id: titleId }, title),
+        message,
+        field,
+        h("div", { class: "buttons" }, h("button", { type: "button", onclick: () => close(null) }, this.t("cancel")), confirmButton),
+      );
+      const dialog = h("div", { class: "dialog", role: "dialog", "aria-modal": "true", "aria-labelledby": titleId }, form);
+      const backdrop = h(
+        "div",
+        {
+          class: "dialog-backdrop",
+          onkeydown: (e) => {
+            if (e.key === "Escape") close(null);
+          },
+          onclick: (e) => {
+            if (e.target === backdrop) close(null);
+          },
+        },
+        dialog,
+      );
+      this._root.append(backdrop);
+      if (field) {
+        field.focus();
+        field.select();
+      } else {
+        confirmButton.focus();
+      }
+    });
   }
 
   async _add(item, mode) {
@@ -496,6 +677,7 @@ class MediaQueuePanel extends HTMLElement {
     const rows = queueRows(this._snapshot);
     this._queueCount.textContent = this.t("items", { count: rows.length });
     this._clearButton.disabled = rows.length === 0;
+    this._saveButton.disabled = rows.length === 0;
     this._queueNote.hidden = !(this._snapshot?.shuffle && rows.length);
     if (this._dragging) return;
     const key = idsKey(rows);
