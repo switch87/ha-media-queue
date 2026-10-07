@@ -57,9 +57,8 @@ and moves on when an item ends.
 ## Requirements
 
 - Home Assistant **2026.9** or newer (developed and tested on 2026.9.4).
-- One Python package, `mutagen` (≥ 1.47, pure Python). Home Assistant ships
-  it already for its `tts` integration; otherwise it is installed
-  automatically.
+- No extra Python packages: tags are read with `mutagen`, which is a
+  dependency of Home Assistant itself.
 - Any `media_player` that supports *play media*. To advance on its own, the
   player must report when an item ends (see [How playing works](#how-playing-works)).
 

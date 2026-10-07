@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.1 — 2026-10-07
+
+### Fixed
+
+- The manifest no longer lists `mutagen`: it is a dependency of Home
+  Assistant itself, and hassfest rejects it in a custom integration.
+
 ## 0.3.0 — 2026-10-07
 
 ### Added
