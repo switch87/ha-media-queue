@@ -15,7 +15,7 @@
   "integration_type": "service",
   "iot_class": "calculated",
   "issue_tracker": "https://github.com/switch87/ha-media-queue/issues",
-  "requirements": ["mutagen==1.48.1"],
+  "requirements": ["mutagen>=1.47"],
   "single_config_entry": true,
   "version": "0.2.0"
 }

@@ -187,8 +187,9 @@ line + branch, mypy --strict, ruff, node tests at 100 % for `frontend/lib`.
 
 - Library: **mutagen 1.48.1** — HA core's `tts` integration pins exactly this
   version, so on the Pi it is (almost always) installed already; pure Python
-  (195 kB wheel, `py3-none-any`), works on aarch64/Python 3.14. Pinned in the
-  manifest at the same version as core.
+  (195 kB wheel, `py3-none-any`), works on aarch64/Python 3.14. The manifest
+  asks `mutagen>=1.47` (review fix: no exact pin, so a later HA core with a
+  newer mutagen still loads the integration); the tests pin 1.48.1.
 - Only items of the local media source (`media-source://media_source/<dir>/…`,
   files inside a configured media dir) are read; everything else keeps its
   browse title.

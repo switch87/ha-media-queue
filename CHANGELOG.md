@@ -22,8 +22,8 @@ Gert's wishes after 0.1.0 ("Dat ziet er al beter uit").
   available as actions (`media_queue.set_shuffle`, `media_queue.set_repeat`)
   and websocket commands (`media_queue/set_shuffle`, `media_queue/set_repeat`);
   snapshots and `get_queue` carry `shuffle` and `repeat`; diagnostics too.
-- **Titles from the tags** of local files (ID3, Vorbis, MP4, … via mutagen
-  1.48.1, the version HA core pins): the queue shows "title – artist" with the
+- **Titles from the tags** of local files (ID3, Vorbis, MP4, … via mutagen,
+  which HA core ships too): the queue shows "title – artist" with the
   file name as tooltip; items also get album and duration. Tags are read in
   the background after the add (batches of at most 100 files / 2 s, at most
   1000 files per add, a 30 s guard per batch, files over 1 GiB skipped), so
@@ -43,7 +43,7 @@ Gert's wishes after 0.1.0 ("Dat ziet er al beter uit").
   stored too.
 - `next` in snapshots is what the next button plays (the first item at the end
   with repeat all; unknown with repeat all + shuffle).
-- New requirement: `mutagen==1.48.1`.
+- New requirement: `mutagen>=1.47` (no exact pin, so HA core can move on).
 
 ## 0.1.0 — 2026-10-07
 

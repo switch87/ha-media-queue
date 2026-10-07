@@ -43,9 +43,9 @@ Copy `custom_components/media_queue` to `/config/custom_components/`, restart
 Home Assistant, then *Settings → Devices & services → Add integration → Media
 queue*. Nothing to configure. The sidebar gets **Muziek** for every user.
 
-One Python package: **mutagen 1.48.1** (pure Python, ~200 kB), the version
-Home Assistant core itself pins for its `tts` integration, so it is usually
-installed already; otherwise Home Assistant installs it at the restart. The
+One Python package: **mutagen** (`>=1.47`, pure Python, ~200 kB). Home
+Assistant core itself ships it for its `tts` integration (1.48.1 in 2026.9),
+so it is usually installed already; otherwise Home Assistant installs it at the restart. The
 panel is a few small JavaScript modules served by the integration (no build
 step, nothing from the internet).
 
