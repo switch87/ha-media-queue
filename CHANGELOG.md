@@ -27,7 +27,10 @@ Gert's wishes after 0.1.0 ("Dat ziet er al beter uit").
   file name as tooltip; items also get album and duration. Tags are read in
   the background after the add (batches of at most 100 files / 2 s, at most
   1000 files per add, a 30 s guard per batch, files over 1 GiB skipped), so
-  adding stays as fast as before.
+  adding stays as fast as before. Embedded covers are never read: FLAC
+  metadata blocks and large ID3 tags are walked block by block / frame by
+  frame, everything else reads at most 256 kB per file (an M4A/Ogg file with a
+  larger cover keeps its file name).
 - The tag duration is used to recognise the end of an item when the player
   reports no duration.
 - `scripts/make_dev_library.py`: tiny tagged MP3s for a dev media folder.

@@ -2,6 +2,7 @@
 
 from collections.abc import Iterator
 from datetime import timedelta
+import io
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -19,7 +20,17 @@ from custom_components.media_queue.expand import AddRequest
 from custom_components.media_queue.model import Mode, QueueItem
 from custom_components.media_queue.tags import Tags, local_file, read_batch, read_tags
 
-from .audio import write_mp3
+from .audio import (
+    flac_block,
+    id3_frame,
+    id3_tag,
+    streaminfo,
+    text_frame,
+    vorbis_comment,
+    write_flac,
+    write_mp3,
+    write_mp3_with_cover,
+)
 from .common import (
     LOCAL,
     PLAYER,
@@ -148,6 +159,163 @@ def test_read_batch_stops_at_its_budget(tmp_path: Path) -> None:
     )
     assert count == 1
     assert list(found) == ["1"]
+
+
+# ------------------------------------------------- covers are never read
+
+COVER = 5 * 1024 * 1024
+FEW = 64 * 1024  # bytes a file may cost at most, cover or not
+
+
+class Counted:
+    """Open files through a counter of the bytes really read from disk."""
+
+    def __init__(self) -> None:
+        """Start at zero."""
+        self.read = 0
+
+    def __call__(self, path: str) -> io.BufferedReader:
+        """Open path; every raw read is counted."""
+        counter = self
+
+        class Raw(io.FileIO):
+            def readinto(self, buffer: Any) -> int | None:
+                count = super().readinto(buffer)
+                counter.read += count or 0
+                return count
+
+        return io.BufferedReader(Raw(path, "rb"), buffer_size=tags.BUFFER)
+
+
+@pytest.fixture
+def counted() -> Iterator[Counted]:
+    """Count what the tag reader reads."""
+    counter = Counted()
+    with patch.object(tags, "_open", counter):
+        yield counter
+
+
+def test_flac_with_a_big_cover(tmp_path: Path, counted: Counted) -> None:
+    """FLAC: only STREAMINFO and the comments are read, the picture skipped."""
+    path = write_flac(
+        tmp_path / "a.flac",
+        flac_block(0, streaminfo(181.5)),
+        flac_block(6, bytes(COVER)),
+        flac_block(1, bytes(8192)),
+        flac_block(
+            4,
+            vorbis_comment(
+                "TITLE=Night Owls", "Artist=Vaya Con Dios", "junk", "ALBUM=NO"
+            ),
+            last=True,
+        ),
+        bytes(COVER),  # "audio" that must not be read either
+    )
+    found = read_tags(str(path))
+    assert found == Tags(
+        title="Night Owls", artist="Vaya Con Dios", album="NO", duration=181.5
+    )
+    assert counted.read < FEW
+
+
+@pytest.mark.parametrize(
+    ("blocks", "expected"),
+    [
+        ((), Tags(None, None, None, None)),
+        ((flac_block(0, bytes(10), last=True),), Tags(None, None, None, None)),
+        ((flac_block(0, bytes(34), last=True),), Tags(None, None, None, None)),
+        (
+            (flac_block(0, streaminfo(2)), flac_block(4, bytes(300 * 1024), last=True)),
+            Tags(None, None, None, 2.0),
+        ),
+    ],
+    ids=["empty", "short-info", "no-rate", "huge-comments"],
+)
+def test_flac_odd_blocks(
+    tmp_path: Path, blocks: tuple[bytes, ...], expected: Tags
+) -> None:
+    """Short, empty and oversized blocks give what can be known."""
+    assert read_tags(str(write_flac(tmp_path / "a.flac", *blocks))) == expected
+
+
+@pytest.mark.parametrize(
+    "comments",
+    [b"\xff\xff\xff\x7f", vorbis_comment("TITLE=x")[:-2]],
+    ids=["vendor", "entry"],
+)
+def test_flac_broken_comments(tmp_path: Path, comments: bytes) -> None:
+    """A comment block that lies about its sizes is no tags."""
+    path = write_flac(tmp_path / "a.flac", flac_block(4, comments, last=True))
+    assert read_tags(str(path)) is None
+
+
+@pytest.mark.parametrize("version", [3, 4])
+def test_mp3_with_a_big_cover(tmp_path: Path, counted: Counted, version: int) -> None:
+    """MP3: the text frames are read, the picture frame is skipped."""
+    path = write_mp3_with_cover(
+        tmp_path / "a.mp3",
+        3,
+        COVER,
+        version,
+        title="Soap Shop Rock",
+        artist="Amon Düül II",
+        album="Yeti",
+    )
+    found = read_tags(str(path))
+    assert found is not None
+    assert (found.title, found.artist, found.album) == (
+        "Soap Shop Rock",
+        "Amon Düül II",
+        "Yeti",
+    )
+    assert found.duration == pytest.approx(3, abs=0.1)
+    assert counted.read < FEW
+
+
+def test_big_id3_frames_and_encodings(tmp_path: Path) -> None:
+    """Every text encoding is read; flagged and unknown frames are skipped."""
+    frames = (
+        id3_frame("APIC", bytes(300 * 1024))
+        + id3_frame("TIT2", b"\x03compressed", flags=0x08)
+        + id3_frame("TIT2", b"\x09unknown encoding")
+        + text_frame("TIT2", "Título", encoding=1)
+        + text_frame("TPE1", "Ärtist", encoding=2)
+        + text_frame("TALB", "Album", encoding=0)
+        + text_frame("TIT2", "second title ignored")
+    )
+    path = tmp_path / "a.mp3"
+    path.write_bytes(id3_tag(frames, padding=100))  # no audio after the tag
+    assert read_tags(str(path)) == Tags("Título", "Ärtist", "Album", None)
+
+
+@pytest.mark.parametrize(
+    "tag",
+    [
+        b"ID3\x02\x00\x00" + bytes([0, 0x20, 0, 0]) + bytes(600 * 1024),
+        b"ID3\x04\x00\x80" + bytes([0, 0x20, 0, 0]) + bytes(600 * 1024),
+        id3_tag(id3_frame("APIC", bytes(300 * 1024)) + text_frame("TIT2", "x")[:8]),
+    ],
+    ids=["v2.2", "unsynchronised", "cut"],
+)
+def test_big_id3_that_cannot_be_walked(tmp_path: Path, tag: bytes) -> None:
+    """Old versions, unsynchronised or cut tags: no titles, still a duration."""
+    path = write_mp3(tmp_path / "a.mp3", 2)
+    path.write_bytes(tag + path.read_bytes())
+    found = read_tags(str(path))
+    assert found is not None
+    assert found.title is None
+    assert found.duration == pytest.approx(2, abs=0.1)
+
+
+def test_reading_stops_at_the_budget(tmp_path: Path) -> None:
+    """Whatever the format, more than the budget is never read: no tags then."""
+    path = write_mp3(tmp_path / "a.mp3", 3, title="T")
+    with patch.object(tags, "READ_BUDGET", 100):
+        assert read_tags(str(path)) is None
+    unknown = tmp_path / "a.ogg"
+    unknown.write_bytes(bytes(1000))
+    with patch.object(tags, "READ_BUDGET", 100):
+        assert read_tags(str(unknown)) is None
 
 
 # ------------------------------------------------------- enrichment in the queue

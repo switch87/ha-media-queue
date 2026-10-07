@@ -114,10 +114,16 @@ media browser gives it.
   with their file name (or the playlist's `#EXTINF` title), then a background
   job reads the tags and the queue updates itself (in batches: at most 100
   files or 2 s of reading per batch, one queue update per batch, at most 1000
-  files per add). Only the tag header and the first audio frame are read: on
-  a local disk 0.1–0.5 ms and under 1 kB (MP3) or ~9 kB (FLAC) per file, about
-  twenty small reads; over a network mount (CIFS) expect a few milliseconds
-  per file.
+  files per add).
+- **Embedded covers are never read.** FLAC files: only the STREAMINFO and
+  VORBIS_COMMENT blocks are read, pictures and padding are skipped. MP3 files
+  with a large ID3 tag (over 128 kB, i.e. a big cover): only the title, artist
+  and album frames are read, the picture is skipped. Everything else (small
+  ID3 tags, M4A, Ogg, …) is read by mutagen, but never more than 256 kB per
+  file: an M4A or Ogg file whose tags are bigger (a large cover) keeps its
+  file name. Measured: ~16 kB read for a FLAC or MP3 with a 5 MB cover, ~25 kB
+  for an MP3 without one (8 kB reads), 0.1–0.5 ms per file on a local disk;
+  over a network mount (CIFS) expect a few milliseconds per file.
 - A tag title wins over `#EXTINF`, which wins over the file name. Files over
   1 GiB are skipped; a batch that does not return within 30 s (a hung mount)
   ends the reading for that add and the file names stay.

@@ -264,3 +264,14 @@ and ~10 seeks, 0.7 kB read for an MP3 and 8.6 kB for a FLAC (first call in a
 process ~36 ms: mutagen's lazy imports). On the Pi over CIFS each file costs
 some network round trips (estimate a few ms to ~20 ms), which is why tags are
 read after the add, in the background.
+
+### Review fix: covers
+
+mutagen reads embedded cover art in full (FLAC PICTURE, ID3 APIC, MP4 covr):
+5.6 MB for a FLAC with a 5 MB picture. `tags.py` now walks FLAC metadata
+blocks itself (STREAMINFO + VORBIS_COMMENT only), walks the frames of ID3v2.3/
+2.4 tags over 128 kB itself (TIT2/TPE1/TALB only; v2.2, unsynchronised or
+flagged frames give no titles; the duration from mutagen's `MPEGInfo` after
+the tag), and gives every other file to mutagen through a reader that stops at
+256 kB (over it: file name). Reads use an 8 kB buffer. Measured: 16 kB for a
+FLAC or MP3 with a 5 MB cover, 25 kB for an MP3 without.
