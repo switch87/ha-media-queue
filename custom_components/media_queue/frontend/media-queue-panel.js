@@ -5,7 +5,8 @@ import { addMessage, browseMessage, itemActions, needsSigning, sourceNote } from
 import { languageOf, translate } from "./lib/i18n.js";
 import { rememberPlayer, restorePlayer } from "./lib/player-memory.js";
 import { listPlayers, playersKey } from "./lib/players.js";
-import { errorText, newError, queueRows, rowsKey } from "./lib/queue-view.js";
+import { limiter } from "./lib/limiter.js";
+import { applyUpdate, errorText, idsKey, newError, queueRows } from "./lib/queue-view.js";
 import { dropIndex, rowAt } from "./lib/reorder.js";
 import { nowPlaying, playPauseAction, queueButtons, volumeOf } from "./lib/transport.js";
 
@@ -108,12 +109,14 @@ class MediaQueuePanel extends HTMLElement {
     this._listing = null;
     this._tab = "library";
     this._stateObj = undefined;
-    this._rowsKey = null;
+    this._idsKey = null;
     this._signed = new Map();
     this._toastTimer = null;
     this._lastErrorAt = null;
     this._dragging = false;
     this._retryTimer = null;
+    this._observer = null;
+    this._signLimit = limiter(4);
   }
 
   set hass(hass) {
@@ -155,7 +158,7 @@ class MediaQueuePanel extends HTMLElement {
     if (language !== this._language) {
       this._language = language;
       this._playersKey = null;
-      this._rowsKey = null;
+      this._idsKey = null;
       this._stateObj = undefined;
       this._build();
     }
@@ -265,7 +268,7 @@ class MediaQueuePanel extends HTMLElement {
     this._entityId = entityId || null;
     if (this._picker && this._entityId) this._picker.value = this._entityId;
     this._snapshot = null;
-    this._rowsKey = null;
+    this._idsKey = null;
     this._stack = [];
     this._stateObj = undefined;
     this._subscribe();
@@ -293,10 +296,12 @@ class MediaQueuePanel extends HTMLElement {
           this._retry(2000);
           return;
         }
-        const error = newError(this._lastErrorAt, snapshot, this._snapshot === null);
-        this._lastErrorAt = snapshot.last_error?.at ?? null;
+        const merged = applyUpdate(this._snapshot, snapshot);
+        if (!merged) return; // a playback update before the first snapshot
+        const error = newError(this._lastErrorAt, merged, this._snapshot === null);
+        this._lastErrorAt = merged.last_error?.at ?? null;
         if (error) this._notify(errorText((key, params) => this.t(key, params), error));
-        this._snapshot = snapshot;
+        this._snapshot = merged;
         this._renderQueue();
         this._renderTransport();
       },
@@ -431,9 +436,22 @@ class MediaQueuePanel extends HTMLElement {
       loading: "lazy",
       onerror: () => img.replaceWith(h("span", { class: "thumb" }, icon(fallbackIcon))),
     });
-    this._sign(url).then((src) => {
-      img.src = src;
+    if (!needsSigning(url)) {
+      img.src = url;
+      return img;
+    }
+    // Sign only what scrolls into view, a few requests at a time.
+    img.dataset.src = url;
+    this._observer ??= new IntersectionObserver((entries) => {
+      for (const entry of entries) {
+        if (!entry.isIntersecting) continue;
+        this._observer.unobserve(entry.target);
+        this._sign(entry.target.dataset.src).then((src) => {
+          entry.target.src = src;
+        });
+      }
     });
+    this._observer.observe(img);
     return img;
   }
 
@@ -442,8 +460,7 @@ class MediaQueuePanel extends HTMLElement {
     if (!this._signed.has(url)) {
       this._signed.set(
         url,
-        this._hass
-          .callWS({ type: "auth/sign_path", path: url, expires: 3600 })
+        this._signLimit(() => this._hass.callWS({ type: "auth/sign_path", path: url, expires: 3600 }))
           .then((result) => result.path)
           .catch(() => url),
       );
@@ -458,9 +475,17 @@ class MediaQueuePanel extends HTMLElement {
     const rows = queueRows(this._snapshot);
     this._queueCount.textContent = this.t("items", { count: rows.length });
     this._clearButton.disabled = rows.length === 0;
-    const key = rowsKey(rows);
-    if (key === this._rowsKey || this._dragging) return;
-    this._rowsKey = key;
+    if (this._dragging) return;
+    const key = idsKey(rows);
+    if (key === this._idsKey && rows.length) {
+      // Same items in the same order: only move the current/next markers.
+      [...this._queueList.children].forEach((li, index) => {
+        li.classList.toggle("current", rows[index].current);
+        li.classList.toggle("next", rows[index].next);
+      });
+      return;
+    }
+    this._idsKey = key;
     if (!rows.length) {
       this._queueList.replaceChildren(h("li", { class: "empty" }, this.t("empty_queue")));
       return;

@@ -68,6 +68,14 @@ _STOPPED_STATES = {
 }
 
 
+class Change(StrEnum):
+    """What changed: the panel gets a full or a small update, saved soon or late."""
+
+    QUEUE = "queue"  # items added, removed, moved: full snapshot, saved soon
+    CURRENT = "current"  # another item plays: small update, saved late
+    PLAYBACK = "playback"  # phase or error only: small update, not saved
+
+
 class Phase(StrEnum):
     """How far the controller follows the player."""
 
@@ -126,7 +134,7 @@ class QueueController:
         self,
         hass: HomeAssistant,
         entity_id: str,
-        on_change: Callable[[QueueController], None],
+        on_change: Callable[[QueueController, Change], None],
         queue: Queue | None = None,
     ) -> None:
         """Create the controller for entity_id."""
@@ -171,9 +179,9 @@ class QueueController:
             task.cancel()
 
     @callback
-    def async_changed(self) -> None:
-        """Tell the manager that the queue or phase changed."""
-        self._on_change(self)
+    def async_changed(self, change: Change = Change.QUEUE) -> None:
+        """Tell the manager what changed."""
+        self._on_change(self, change)
 
     # --------------------------------------------------------------- commands
 
@@ -202,6 +210,7 @@ class QueueController:
         async with self._lock:
             result = self.queue.add(expansion.items, mode, limit=QUEUE_LIMIT)
             if mode in (Mode.REPLACE, Mode.PLAY):
+                self.async_changed()
                 self._failures = 0
                 await self._play(result.start, context)
             else:
@@ -300,7 +309,7 @@ class QueueController:
         self._calling = True
         self.phase = Phase.STARTING
         self.fingerprint = None
-        self.async_changed()
+        self.async_changed(Change.CURRENT)
         try:
             await self._play_media(item, context)
         except Exception as err:  # players raise their own errors (MPD)
@@ -363,7 +372,7 @@ class QueueController:
                     return
             self.phase = Phase.IDLE
             self.fingerprint = None
-            self.async_changed()
+            self.async_changed(Change.PLAYBACK)
 
     @callback
     def _starting_timed_out(self, _now: datetime) -> None:
@@ -390,7 +399,7 @@ class QueueController:
             "message": message,
             "at": dt_util.utcnow().isoformat(),
         }
-        self.async_changed()
+        self.async_changed(Change.PLAYBACK)
 
     def _cancel_watchdog(self) -> None:
         self._watchdog()
@@ -419,7 +428,7 @@ class QueueController:
             else:
                 self.phase = Phase.PLAYING
                 self._playing_since = new.last_changed
-                self.async_changed()
+                self.async_changed(Change.PLAYBACK)
 
     def _while_playing(self, old: State | None, new: State) -> None:
         if new.state == MediaPlayerState.PLAYING:
@@ -428,7 +437,6 @@ class QueueController:
                 return
             if self.fingerprint is None and _content_id(new) is not None:
                 self.fingerprint = _content_id(new)
-                self.async_changed()
             if old is None or old.state != MediaPlayerState.PLAYING:
                 self._playing_since = new.last_changed
             return
@@ -491,19 +499,31 @@ class QueueController:
         self.fingerprint = _content_id(state)
         self._played = 0.0
         self._playing_since = state.last_changed
-        self.async_changed()
+        self.async_changed(Change.PLAYBACK)
 
     def _stopped(self) -> None:
         self.phase = Phase.STOPPED
-        self.async_changed()
+        self.async_changed(Change.PLAYBACK)
 
     def _detach(self) -> None:
         _LOGGER.debug("%s plays something else; no longer following", self.entity_id)
         self.phase = Phase.IDLE
         self.fingerprint = None
-        self.async_changed()
+        self.async_changed(Change.PLAYBACK)
 
     # ------------------------------------------------------------ persistence
+
+    def playback(self) -> dict[str, Any]:
+        """Return the small update for playback-only changes."""
+        upcoming = self.queue.next_position
+        return {
+            "entity_id": self.entity_id,
+            "playback": True,
+            "current": self.queue.current,
+            "next": upcoming if upcoming < len(self.queue.items) else None,
+            "phase": self.phase.value,
+            "last_error": self.last_error,
+        }
 
     def snapshot(self) -> dict[str, Any]:
         """Return the state for the panel."""
@@ -524,7 +544,7 @@ class QueueController:
         hass: HomeAssistant,
         entity_id: str,
         data: dict[str, Any],
-        on_change: Callable[[QueueController], None],
+        on_change: Callable[[QueueController, Change], None],
     ) -> QueueController:
         """Return the controller stored in data."""
         controller = cls(hass, entity_id, on_change, Queue.from_dict(data))

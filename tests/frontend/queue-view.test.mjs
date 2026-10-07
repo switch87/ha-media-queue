@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { currentItem, errorText, newError, queueRows, rowsKey } from "../../custom_components/media_queue/frontend/lib/queue-view.js";
+import { applyUpdate, currentItem, errorText, idsKey, newError, queueRows } from "../../custom_components/media_queue/frontend/lib/queue-view.js";
 
 const snapshot = {
   entity_id: "media_player.a",
@@ -33,12 +33,6 @@ test("rows mark the current and the next item", () => {
   assert.deepEqual(queueRows(undefined), []);
 });
 
-test("the rows key follows ids and markers", () => {
-  const key = rowsKey(queueRows(snapshot));
-  assert.equal(key, "1:c,2:n,3:");
-  assert.notEqual(key, rowsKey(queueRows({ ...snapshot, current: 1, next: 2 })));
-});
-
 test("the current item", () => {
   assert.equal(currentItem(snapshot).title, "A");
   assert.equal(currentItem({ ...snapshot, current: null }), null);
@@ -65,4 +59,34 @@ test("error text per kind", () => {
     errorText(t, { kind: "cannot_play", title: "B", message: "down" }),
     'error_cannot_play:{"title":"B","message":"down"}',
   );
+});
+
+test("a playback update changes only position, phase and error", () => {
+  const base = {
+    entity_id: "media_player.a",
+    items: [{ id: "1" }, { id: "2" }],
+    current: 0,
+    next: 1,
+    phase: "playing",
+    last_error: null,
+  };
+  const merged = applyUpdate(base, {
+    entity_id: "media_player.a",
+    playback: true,
+    current: 1,
+    next: null,
+    phase: "stopped",
+    last_error: null,
+  });
+  assert.deepEqual(merged, { ...base, current: 1, next: null, phase: "stopped" });
+  assert.equal(merged.items, base.items);
+  assert.equal(applyUpdate(base, { ...base, items: [] }).items.length, 0);
+  assert.equal(applyUpdate(null, { playback: true, current: 0 }), null);
+});
+
+test("the ids key ignores markers", () => {
+  const rows = queueRows({ items: [{ id: "1" }, { id: "2" }], current: 0, next: 1 });
+  const moved = queueRows({ items: [{ id: "1" }, { id: "2" }], current: 1, next: null });
+  assert.equal(idsKey(rows), idsKey(moved));
+  assert.notEqual(idsKey(rows), idsKey(queueRows({ items: [{ id: "2" }, { id: "1" }] })));
 });

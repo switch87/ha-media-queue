@@ -3,15 +3,23 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from datetime import timedelta
 from typing import Any
 
 from homeassistant.const import Platform
 from homeassistant.core import CALLBACK_TYPE, HomeAssistant, callback
 from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers.storage import Store
+from homeassistant.util import dt as dt_util
 
-from .const import DOMAIN, SAVE_DELAY, STORAGE_KEY, STORAGE_VERSION
-from .controller import Phase, QueueController, snapshot
+from .const import (
+    DOMAIN,
+    PLAYBACK_SAVE_DELAY,
+    SAVE_DELAY,
+    STORAGE_KEY,
+    STORAGE_VERSION,
+)
+from .controller import Change, Phase, QueueController, snapshot
 from .model import Queue
 
 type Subscriber = Callable[[dict[str, Any]], None]
@@ -34,6 +42,8 @@ class QueueManager:
         self._controllers: dict[str, QueueController] = {}
         self._subscribers: dict[str, list[tuple[Subscriber, Closer | None]]] = {}
         self._unloaded = False
+        # Until when a soon save (after a queue edit) is pending.
+        self._soon_save_until = dt_util.utcnow()
 
     @property
     def entity_ids(self) -> list[str]:
@@ -102,15 +112,22 @@ class QueueManager:
         return unsubscribe
 
     @callback
-    def _changed(self, controller: QueueController) -> None:
+    def _changed(self, controller: QueueController, change: Change) -> None:
         if self._unloaded:
             return  # a late change (an advance being cancelled): not ours anymore
-        data = controller.snapshot()
+        full = change is Change.QUEUE
+        data = controller.snapshot() if full else controller.playback()
         for subscriber, _on_close in list(
             self._subscribers.get(controller.entity_id, [])
         ):
             subscriber(data)
-        self._store.async_delay_save(self._data, SAVE_DELAY)
+        now = dt_util.utcnow()
+        if full:
+            self._store.async_delay_save(self._data, SAVE_DELAY)
+            self._soon_save_until = now + timedelta(seconds=SAVE_DELAY)
+        elif change is Change.CURRENT and now >= self._soon_save_until:
+            # Rescheduling would postpone a pending soon save; it covers this.
+            self._store.async_delay_save(self._data, PLAYBACK_SAVE_DELAY)
 
     def _data(self) -> dict[str, Any]:
         return {

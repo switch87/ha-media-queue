@@ -14,11 +14,6 @@ export function queueRows(snapshot) {
   }));
 }
 
-/** Return a short key per row list, so the DOM is rebuilt only on changes. */
-export function rowsKey(rows) {
-  return rows.map((r) => `${r.id}:${r.current ? "c" : ""}${r.next ? "n" : ""}`).join(",");
-}
-
 /** Return the item playing (or last played) from the queue, if any. */
 export function currentItem(snapshot) {
   const index = snapshot?.current;
@@ -40,4 +35,26 @@ export function newError(lastAt, snapshot, first) {
 /** Return the message for a playback error (t translates a key). */
 export function errorText(t, error) {
   return t(`error_${error.kind}`, { title: error.title, message: error.message });
+}
+
+/** Return the snapshot after an update: a full snapshot or a playback-only one. */
+export function applyUpdate(snapshot, update) {
+  if (!update.playback) {
+    return update;
+  }
+  if (!snapshot) {
+    return null;
+  }
+  return {
+    ...snapshot,
+    current: update.current,
+    next: update.next,
+    phase: update.phase,
+    last_error: update.last_error,
+  };
+}
+
+/** Return a key of the item order only (markers change in place). */
+export function idsKey(rows) {
+  return rows.map((r) => r.id).join(",");
 }

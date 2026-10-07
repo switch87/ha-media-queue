@@ -3,12 +3,17 @@
 from datetime import timedelta
 from typing import Any
 
+from freezegun.api import FrozenDateTimeFactory
 from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
 from pytest_homeassistant_custom_component.common import async_fire_time_changed
 
-from custom_components.media_queue.const import SAVE_DELAY, STORAGE_KEY
-from custom_components.media_queue.controller import Phase
+from custom_components.media_queue.const import (
+    PLAYBACK_SAVE_DELAY,
+    SAVE_DELAY,
+    STORAGE_KEY,
+)
+from custom_components.media_queue.controller import Change, Phase
 from custom_components.media_queue.manager import QueueManager
 from custom_components.media_queue.model import Mode, QueueItem
 
@@ -234,3 +239,68 @@ async def test_unload_closes_subscriptions_and_ignores_late_changes(
     await hass.async_block_till_done()
     assert seen == []
     assert hass_storage[STORAGE_KEY]["data"] == {"queues": {}}
+
+
+async def test_playback_changes_send_small_events_and_save_rarely(
+    hass: HomeAssistant,
+    hass_storage: dict[str, Any],
+    freezer: FrozenDateTimeFactory,
+) -> None:
+    """Phase churn: a small event, no write; a new current: a late write."""
+    manager = QueueManager(hass)
+    await manager.async_load()
+    seen: list[dict[str, Any]] = []
+    manager.subscribe(PLAYER, seen.append)
+    controller = manager.controller(PLAYER)
+    controller.queue.add([_item("a"), _item("b")], Mode.ADD, limit=10)
+    controller.async_changed()
+    assert "items" in seen[-1]
+    freezer.tick(timedelta(seconds=SAVE_DELAY + 1))
+    async_fire_time_changed(hass)
+    await hass.async_block_till_done()
+    hass_storage.pop(STORAGE_KEY)
+
+    controller.phase = Phase.STOPPED
+    controller.async_changed(Change.PLAYBACK)
+    assert seen[-1] == {
+        "entity_id": PLAYER,
+        "playback": True,
+        "current": None,
+        "next": 0,
+        "phase": "stopped",
+        "last_error": None,
+    }
+    freezer.tick(timedelta(seconds=PLAYBACK_SAVE_DELAY + 1))
+    async_fire_time_changed(hass)
+    await hass.async_block_till_done()
+    assert STORAGE_KEY not in hass_storage  # phase churn is not written
+
+    controller.queue.set_current(1)
+    controller.async_changed(Change.CURRENT)
+    assert seen[-1]["current"] == 1
+    freezer.tick(timedelta(seconds=SAVE_DELAY + 1))
+    async_fire_time_changed(hass)
+    await hass.async_block_till_done()
+    assert STORAGE_KEY not in hass_storage  # a new current waits longer
+    freezer.tick(timedelta(seconds=PLAYBACK_SAVE_DELAY + 1))
+    async_fire_time_changed(hass)
+    await hass.async_block_till_done()
+    assert hass_storage[STORAGE_KEY]["data"]["queues"][PLAYER]["current"] == 1
+    await manager.async_unload()
+
+
+async def test_current_change_does_not_delay_a_queue_save(
+    hass: HomeAssistant, hass_storage: dict[str, Any]
+) -> None:
+    """A queue edit is written soon even when playback changes follow."""
+    manager = QueueManager(hass)
+    await manager.async_load()
+    controller = manager.controller(PLAYER)
+    controller.queue.add([_item("a")], Mode.ADD, limit=10)
+    controller.async_changed()
+    controller.queue.set_current(0)
+    controller.async_changed(Change.CURRENT)
+    async_fire_time_changed(hass, dt_util.utcnow() + timedelta(seconds=SAVE_DELAY + 1))
+    await hass.async_block_till_done()
+    assert hass_storage[STORAGE_KEY]["data"]["queues"][PLAYER]["current"] == 0
+    await manager.async_unload()
