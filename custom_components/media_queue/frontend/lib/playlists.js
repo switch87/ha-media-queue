@@ -101,3 +101,9 @@ export function cleanName(text) {
 export function isNameTaken(err) {
   return err?.translation_key === "playlist_exists";
 }
+
+/** Return the playlist summary called name (any case), or null. */
+export function findByName(summaries, name) {
+  const folded = name.toLocaleLowerCase();
+  return (summaries ?? []).find((summary) => summary.name.toLocaleLowerCase() === folded) ?? null;
+}

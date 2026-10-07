@@ -6,6 +6,7 @@ import { languageOf, translate } from "./lib/i18n.js";
 import {
   cleanName,
   deleteMessage,
+  findByName,
   getMessage,
   isNameTaken,
   listMessage,
@@ -507,7 +508,23 @@ class MediaQueuePanel extends HTMLElement {
     const opener = this._saveButton;
     const name = await this._dialog({ title: this.t("save_playlist"), input: "", confirm: this.t("save"), opener });
     if (name === null) return;
-    for (const overwrite of [false, true]) {
+    // Ask before overwriting; the server checks again (and is the judge).
+    let taken = null;
+    try {
+      taken = findByName((await this._hass.callWS(listMessage())).playlists, name);
+    } catch {
+      // the save below reports the error
+    }
+    if (taken) {
+      const sure = await this._dialog({
+        title: this.t("save_playlist"),
+        text: this.t("overwrite_question", { name: taken.name }),
+        confirm: this.t("overwrite"),
+        opener,
+      });
+      if (sure === null) return;
+    }
+    for (const overwrite of taken ? [true] : [false, true]) {
       try {
         await this._hass.callWS(saveMessage(this._entityId, name, overwrite));
         this._notify(this.t("saved", { name }));

@@ -5,6 +5,7 @@ import {
   PLAYLISTS_ID,
   cleanName,
   deleteMessage,
+  findByName,
   getMessage,
   isNameTaken,
   listMessage,
@@ -117,4 +118,11 @@ test("a taken name is recognised in the error", () => {
   assert.equal(isNameTaken({ translation_key: "playlist_exists" }), true);
   assert.equal(isNameTaken({ code: "unauthorized" }), false);
   assert.equal(isNameTaken(undefined), false);
+});
+
+test("a taken name is found in the list first (any case)", () => {
+  const list = [{ id: "p1", name: "Zondag" }];
+  assert.equal(findByName(list, "zondag").id, "p1");
+  assert.equal(findByName(list, "Maandag"), null);
+  assert.equal(findByName(undefined, "x"), null);
 });
