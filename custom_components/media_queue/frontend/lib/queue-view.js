@@ -7,6 +7,8 @@ export function queueRows(snapshot) {
     index,
     id: item.id,
     title: item.title,
+    label: labelOf(item),
+    tooltip: fileName(item.media_content_id) ?? labelOf(item),
     thumbnail: item.thumbnail ?? null,
     mediaClass: item.media_class ?? null,
     current: index === snapshot.current,
@@ -54,7 +56,32 @@ export function applyUpdate(snapshot, update) {
   };
 }
 
-/** Return a key of the item order only (markers change in place). */
+/** Return a key of the items and their labels (markers change in place). */
 export function idsKey(rows) {
-  return rows.map((r) => r.id).join(",");
+  return rows.map((r) => `${r.id}\u0000${r.label}`).join("\u0001");
+}
+
+const LOCAL_MEDIA = "media-source://media_source/";
+
+/** Return the file name of a local media item's id, else null. */
+export function fileName(contentId) {
+  if (!contentId?.startsWith(LOCAL_MEDIA)) {
+    return null;
+  }
+  const rest = contentId.slice(LOCAL_MEDIA.length);
+  const slash = rest.indexOf("/");
+  const name = slash < 0 ? "" : rest.slice(slash + 1).split("/").pop();
+  if (!name) {
+    return null;
+  }
+  try {
+    return decodeURIComponent(name);
+  } catch {
+    return name; // a "%" that is no escape
+  }
+}
+
+/** Return "title – artist" (or the title alone). */
+function labelOf(item) {
+  return item.artist ? `${item.title} – ${item.artist}` : item.title;
 }

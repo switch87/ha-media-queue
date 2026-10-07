@@ -2,7 +2,14 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import { FEATURE } from "../../custom_components/media_queue/frontend/lib/players.js";
-import { nowPlaying, playPauseAction, queueButtons, volumeOf } from "../../custom_components/media_queue/frontend/lib/transport.js";
+import {
+  nowPlaying,
+  playPauseAction,
+  queueButtons,
+  repeatButton,
+  shuffleButton,
+  volumeOf,
+} from "../../custom_components/media_queue/frontend/lib/transport.js";
 
 const player = (state, features, attrs = {}) => ({
   entity_id: "media_player.a",
@@ -72,4 +79,52 @@ test("now playing prefers the player's info, then the queue", () => {
     picture: null,
   });
   assert.deepEqual(nowPlaying(undefined, undefined), { title: null, subtitle: "", picture: null });
+});
+
+test("next wraps with repeat all", () => {
+  assert.deepEqual(queueButtons({ ...queue(["a"], 0, null), repeat: "all" }), { previous: true, next: true });
+  assert.deepEqual(queueButtons({ ...queue([], null, null), repeat: "all" }), { previous: false, next: false });
+});
+
+test("the shuffle button toggles and shows its state", () => {
+  assert.deepEqual(shuffleButton({ ...queue(["a"], 0, null), shuffle: true }), {
+    pressed: true,
+    icon: "mdi:shuffle-variant",
+    title: "shuffle_on",
+    value: false,
+  });
+  assert.deepEqual(shuffleButton(queue(["a"], 0, null)), {
+    pressed: false,
+    icon: "mdi:shuffle-disabled",
+    title: "shuffle_off",
+    value: true,
+  });
+  assert.equal(shuffleButton(undefined).value, true);
+});
+
+test("the repeat button cycles off, all, one", () => {
+  assert.deepEqual(repeatButton(undefined), {
+    pressed: false,
+    icon: "mdi:repeat-off",
+    title: "repeat_off",
+    value: "all",
+  });
+  assert.deepEqual(repeatButton({ repeat: "all" }), {
+    pressed: true,
+    icon: "mdi:repeat",
+    title: "repeat_all",
+    value: "one",
+  });
+  assert.deepEqual(repeatButton({ repeat: "one" }), {
+    pressed: true,
+    icon: "mdi:repeat-once",
+    title: "repeat_one",
+    value: "off",
+  });
+  assert.equal(repeatButton({ repeat: "twice" }).value, "all");
+});
+
+test("now playing from the queue shows the tags", () => {
+  const tagged = { items: [{ id: "1", title: "Song", artist: "Band", album: "Record" }], current: 0 };
+  assert.deepEqual(nowPlaying(player("idle", 0), tagged), { title: "Song", subtitle: "Band – Record", picture: null });
 });

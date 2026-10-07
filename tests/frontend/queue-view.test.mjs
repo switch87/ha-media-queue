@@ -1,7 +1,15 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { applyUpdate, currentItem, errorText, idsKey, newError, queueRows } from "../../custom_components/media_queue/frontend/lib/queue-view.js";
+import {
+  applyUpdate,
+  currentItem,
+  errorText,
+  fileName,
+  idsKey,
+  newError,
+  queueRows,
+} from "../../custom_components/media_queue/frontend/lib/queue-view.js";
 
 const snapshot = {
   entity_id: "media_player.a",
@@ -21,6 +29,8 @@ test("rows mark the current and the next item", () => {
     index: 0,
     id: "1",
     title: "A",
+    label: "A",
+    tooltip: "A",
     thumbnail: "/a.jpg",
     mediaClass: "music",
     current: true,
@@ -89,4 +99,46 @@ test("the ids key ignores markers", () => {
   const moved = queueRows({ items: [{ id: "1" }, { id: "2" }], current: 1, next: null });
   assert.equal(idsKey(rows), idsKey(moved));
   assert.notEqual(idsKey(rows), idsKey(queueRows({ items: [{ id: "2" }, { id: "1" }] })));
+});
+
+test("rows show title – artist, the file name as tooltip", () => {
+  const [row, plain] = queueRows({
+    items: [
+      {
+        id: "1",
+        title: "Soap Shop Rock",
+        artist: "Amon Düül II",
+        media_content_id: "media-source://media_source/local/Yeti/01%20Soap.mp3",
+      },
+      { id: "2", title: "Radio", media_content_id: "http://radio/stream" },
+    ],
+    current: null,
+    next: 0,
+  });
+  assert.equal(row.label, "Soap Shop Rock – Amon Düül II");
+  assert.equal(row.tooltip, "01 Soap.mp3");
+  assert.equal(plain.label, "Radio");
+  assert.equal(plain.tooltip, "Radio");
+});
+
+test("file names of local media only, also when badly encoded", () => {
+  assert.equal(fileName("media-source://media_source/local/A/b c.mp3"), "b c.mp3");
+  assert.equal(fileName("media-source://media_source/local/A/100%.mp3"), "100%.mp3");
+  assert.equal(fileName("media-source://media_source/local/"), null);
+  assert.equal(fileName("media-source://media_source/local"), null);
+  assert.equal(fileName("media-source://radio_browser/x"), null);
+  assert.equal(fileName(undefined), null);
+});
+
+test("the key changes when a title arrives from the tags", () => {
+  const before = queueRows({ items: [{ id: "1", title: "01.mp3" }] });
+  const after = queueRows({ items: [{ id: "1", title: "Song", artist: "Band" }] });
+  assert.notEqual(idsKey(before), idsKey(after));
+});
+
+test("a playback update keeps shuffle and repeat", () => {
+  const base = { items: [], current: null, next: null, shuffle: true, repeat: "one" };
+  const merged = applyUpdate(base, { playback: true, current: 0, next: null, phase: "idle", last_error: null });
+  assert.equal(merged.shuffle, true);
+  assert.equal(merged.repeat, "one");
 });

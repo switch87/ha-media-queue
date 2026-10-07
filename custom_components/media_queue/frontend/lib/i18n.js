@@ -32,6 +32,13 @@ export const STRINGS = {
     error_did_not_start: "\u201c{title}\u201d did not start; skipped.",
     note_sonos_library:
       "Sonos plays these items by replacing its own queue; this queue still steps through them one by one.",
+    shuffle: "Shuffle",
+    shuffle_on: "Shuffle: on",
+    shuffle_off: "Shuffle: off",
+    repeat_off: "Repeat: off",
+    repeat_all: "Repeat: whole queue",
+    repeat_one: "Repeat: current item",
+    shuffled: "Shuffled: the queue is shown in play order.",
   },
   nl: {
     title: "Muziek",
@@ -64,6 +71,13 @@ export const STRINGS = {
     error_did_not_start: "\u201c{title}\u201d startte niet; overgeslagen.",
     note_sonos_library:
       "Sonos speelt deze items door zijn eigen wachtrij te vervangen; deze wachtrij speelt ze wel een voor een af.",
+    shuffle: "Willekeurige volgorde",
+    shuffle_on: "Willekeurige volgorde: aan",
+    shuffle_off: "Willekeurige volgorde: uit",
+    repeat_off: "Herhalen: uit",
+    repeat_all: "Herhalen: hele wachtrij",
+    repeat_one: "Herhalen: huidig item",
+    shuffled: "Willekeurig: de wachtrij staat in afspeelvolgorde.",
   },
 };
 

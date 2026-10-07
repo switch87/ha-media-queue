@@ -38,3 +38,11 @@ test("both languages have the same keys and placeholders", () => {
     assert.deepEqual(holes(STRINGS.nl[key]), holes(text), key);
   }
 });
+
+test("labels of the shuffle and repeat buttons", () => {
+  for (const key of ["shuffle", "shuffle_on", "shuffle_off", "repeat_off", "repeat_all", "repeat_one", "shuffled"]) {
+    assert.notEqual(translate("en", key), key, key);
+  }
+  assert.equal(translate("nl", "repeat_one"), "Herhalen: huidig item");
+  assert.equal(translate("en", "shuffle_on"), "Shuffle: on");
+});

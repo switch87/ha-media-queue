@@ -31,7 +31,8 @@ export function playPauseAction(stateObj, snapshot) {
 /** Return whether previous/next through the queue make sense now. */
 export function queueButtons(snapshot) {
   const count = snapshot?.items?.length ?? 0;
-  return { previous: count > 0, next: snapshot?.next !== null && snapshot?.next !== undefined };
+  const hasNext = snapshot?.next !== null && snapshot?.next !== undefined;
+  return { previous: count > 0, next: hasNext || (snapshot?.repeat === "all" && count > 0) };
 }
 
 /** Return the volume (0–100) when the player can set it, else null. */
@@ -49,10 +50,39 @@ export function nowPlaying(stateObj, snapshot) {
   const active = ["playing", "paused", "buffering"].includes(stateObj?.state);
   const item = currentItem(snapshot);
   const title = (active && attrs.media_title) || item?.title || null;
-  const subtitle = active ? [attrs.media_artist, attrs.media_album_name].filter(Boolean).join(" – ") : "";
+  const parts = active ? [attrs.media_artist, attrs.media_album_name] : [item?.artist, item?.album];
+  const subtitle = parts.filter(Boolean).join(" – ");
   return {
     title,
     subtitle,
     picture: (active && attrs.entity_picture) || item?.thumbnail || null,
+  };
+}
+
+/** Return the shuffle toggle: state, icon, title key and the value a click sends. */
+export function shuffleButton(snapshot) {
+  const on = snapshot?.shuffle === true;
+  return {
+    pressed: on,
+    icon: on ? "mdi:shuffle-variant" : "mdi:shuffle-disabled",
+    title: on ? "shuffle_on" : "shuffle_off",
+    value: !on,
+  };
+}
+
+const REPEAT = {
+  off: { icon: "mdi:repeat-off", next: "all" },
+  all: { icon: "mdi:repeat", next: "one" },
+  one: { icon: "mdi:repeat-once", next: "off" },
+};
+
+/** Return the repeat button; a click cycles off → all → one → off. */
+export function repeatButton(snapshot) {
+  const mode = REPEAT[snapshot?.repeat] ? snapshot.repeat : "off";
+  return {
+    pressed: mode !== "off",
+    icon: REPEAT[mode].icon,
+    title: `repeat_${mode}`,
+    value: REPEAT[mode].next,
   };
 }
