@@ -6,7 +6,7 @@
       }
     },
     "abort": {
-      "single_instance_allowed": "[%key:common::config_flow::abort::single_instance_allowed%]"
+      "single_instance_allowed": "Already configured. Only a single configuration possible."
     }
   },
   "exceptions": {
@@ -77,8 +77,8 @@
       "description": "Plays the item at a position in the queue (0 is the first).",
       "fields": {
         "entity_id": {
-          "name": "[%key:component::media_queue::services::add::fields::entity_id::name%]",
-          "description": "[%key:component::media_queue::services::add::fields::entity_id::description%]"
+          "name": "Player",
+          "description": "The media player whose queue to change."
         },
         "index": {
           "name": "Position",
@@ -91,8 +91,8 @@
       "description": "Plays the next item of the queue.",
       "fields": {
         "entity_id": {
-          "name": "[%key:component::media_queue::services::add::fields::entity_id::name%]",
-          "description": "[%key:component::media_queue::services::add::fields::entity_id::description%]"
+          "name": "Player",
+          "description": "The media player whose queue to change."
         }
       }
     },
@@ -101,8 +101,8 @@
       "description": "Plays the previous item of the queue.",
       "fields": {
         "entity_id": {
-          "name": "[%key:component::media_queue::services::add::fields::entity_id::name%]",
-          "description": "[%key:component::media_queue::services::add::fields::entity_id::description%]"
+          "name": "Player",
+          "description": "The media player whose queue to change."
         }
       }
     },
@@ -111,12 +111,12 @@
       "description": "Removes the item at a position from the queue.",
       "fields": {
         "entity_id": {
-          "name": "[%key:component::media_queue::services::add::fields::entity_id::name%]",
-          "description": "[%key:component::media_queue::services::add::fields::entity_id::description%]"
+          "name": "Player",
+          "description": "The media player whose queue to change."
         },
         "index": {
-          "name": "[%key:component::media_queue::services::play_index::fields::index::name%]",
-          "description": "[%key:component::media_queue::services::play_index::fields::index::description%]"
+          "name": "Position",
+          "description": "Position in the queue, 0 is the first item."
         }
       }
     },
@@ -125,8 +125,8 @@
       "description": "Moves an item to another position in the queue.",
       "fields": {
         "entity_id": {
-          "name": "[%key:component::media_queue::services::add::fields::entity_id::name%]",
-          "description": "[%key:component::media_queue::services::add::fields::entity_id::description%]"
+          "name": "Player",
+          "description": "The media player whose queue to change."
         },
         "from_index": {
           "name": "From position",
@@ -143,8 +143,8 @@
       "description": "Removes every item from the queue; what plays now keeps playing.",
       "fields": {
         "entity_id": {
-          "name": "[%key:component::media_queue::services::add::fields::entity_id::name%]",
-          "description": "[%key:component::media_queue::services::add::fields::entity_id::description%]"
+          "name": "Player",
+          "description": "The media player whose queue to change."
         }
       }
     },
@@ -153,8 +153,8 @@
       "description": "Returns the queue of a player: its items and the current position.",
       "fields": {
         "entity_id": {
-          "name": "[%key:component::media_queue::services::add::fields::entity_id::name%]",
-          "description": "[%key:component::media_queue::services::add::fields::entity_id::description%]"
+          "name": "Player",
+          "description": "The media player whose queue to change."
         }
       }
     }

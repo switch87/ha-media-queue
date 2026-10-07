@@ -62,3 +62,9 @@ def test_every_service_and_field_is_described() -> None:
     assert set(services) == set(strings)
     for name, service in services.items():
         assert set(service["fields"]) == set(strings[name]["fields"]), name
+
+
+def test_no_references_in_translations() -> None:
+    """Custom integrations get no [%key:…] resolution: every text is written out."""
+    for path in (COMPONENT / "translations").glob("*.json"):
+        assert "[%key:" not in path.read_text(encoding="utf-8"), path.name
