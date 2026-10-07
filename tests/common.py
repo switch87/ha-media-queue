@@ -49,12 +49,13 @@ class PlayerLog:
         self.calls: list[ServiceCall] = []
         self.on_play: Callable[[ServiceCall], None] | None = None
         self.fail: str | None = None
+        self.error: Exception = HomeAssistantError("player refused")
         hass.services.async_register("media_player", "play_media", self._handle)
 
     async def _handle(self, call: ServiceCall) -> None:
         self.calls.append(call)
         if self.fail is not None and self.fail in call.data["media_content_id"]:
-            raise HomeAssistantError("player refused")
+            raise self.error
         if self.on_play is not None:
             self.on_play(call)
 

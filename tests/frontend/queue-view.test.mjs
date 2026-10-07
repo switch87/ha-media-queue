@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { currentItem, queueRows, rowsKey } from "../../custom_components/media_queue/frontend/lib/queue-view.js";
+import { currentItem, errorText, newError, queueRows, rowsKey } from "../../custom_components/media_queue/frontend/lib/queue-view.js";
 
 const snapshot = {
   entity_id: "media_player.a",
@@ -44,4 +44,25 @@ test("the current item", () => {
   assert.equal(currentItem({ ...snapshot, current: null }), null);
   assert.equal(currentItem({ ...snapshot, current: 7 }), null);
   assert.equal(currentItem(undefined), null);
+});
+
+test("a new playback error is shown once, not the one present at load", () => {
+  const error = { kind: "did_not_start", title: "B", message: "", at: "t1" };
+  assert.equal(newError(null, { last_error: error }, true), null);
+  assert.deepEqual(newError(null, { last_error: error }, false), error);
+  assert.equal(newError("t1", { last_error: error }, false), null);
+  assert.equal(newError("t1", { last_error: null }, false), null);
+  assert.equal(newError(null, undefined, false), null);
+});
+
+test("error text per kind", () => {
+  const t = (key, params) => `${key}:${JSON.stringify(params)}`;
+  assert.equal(
+    errorText(t, { kind: "did_not_start", title: "B", message: "" }),
+    'error_did_not_start:{"title":"B","message":""}',
+  );
+  assert.equal(
+    errorText(t, { kind: "cannot_play", title: "B", message: "down" }),
+    'error_cannot_play:{"title":"B","message":"down"}',
+  );
 });

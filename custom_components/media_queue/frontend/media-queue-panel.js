@@ -5,7 +5,7 @@ import { addMessage, browseMessage, itemActions, needsSigning } from "./lib/brow
 import { languageOf, translate } from "./lib/i18n.js";
 import { rememberPlayer, restorePlayer } from "./lib/player-memory.js";
 import { listPlayers, playersKey } from "./lib/players.js";
-import { queueRows, rowsKey } from "./lib/queue-view.js";
+import { errorText, newError, queueRows, rowsKey } from "./lib/queue-view.js";
 import { dropIndex, rowAt } from "./lib/reorder.js";
 import { nowPlaying, playPauseAction, queueButtons, volumeOf } from "./lib/transport.js";
 
@@ -111,6 +111,7 @@ class MediaQueuePanel extends HTMLElement {
     this._rowsKey = null;
     this._signed = new Map();
     this._toastTimer = null;
+    this._lastErrorAt = null;
   }
 
   set hass(hass) {
@@ -283,6 +284,9 @@ class MediaQueuePanel extends HTMLElement {
     this._unsubscribe = this._hass.connection.subscribeMessage(
       (snapshot) => {
         if (snapshot.entity_id !== this._entityId) return;
+        const error = newError(this._lastErrorAt, snapshot, this._snapshot === null);
+        this._lastErrorAt = snapshot.last_error?.at ?? null;
+        if (error) this._notify(errorText((key, params) => this.t(key, params), error));
         this._snapshot = snapshot;
         this._renderQueue();
         this._renderTransport();

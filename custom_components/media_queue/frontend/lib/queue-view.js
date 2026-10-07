@@ -24,3 +24,20 @@ export function currentItem(snapshot) {
   const index = snapshot?.current;
   return index === null || index === undefined ? null : snapshot.items[index] ?? null;
 }
+
+/**
+ * Return the playback error to show: a new one since lastAt, never the one
+ * already present in the first snapshot after opening the panel.
+ */
+export function newError(lastAt, snapshot, first) {
+  const error = snapshot?.last_error ?? null;
+  if (first || !error || error.at === lastAt) {
+    return null;
+  }
+  return error;
+}
+
+/** Return the message for a playback error (t translates a key). */
+export function errorText(t, error) {
+  return t(`error_${error.kind}`, { title: error.title, message: error.message });
+}

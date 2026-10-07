@@ -7,11 +7,17 @@ from typing import Any
 
 from freezegun.api import FrozenDateTimeFactory
 from homeassistant.core import HomeAssistant, ServiceCall
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.util import dt as dt_util
 import pytest
+from pytest_homeassistant_custom_component.common import async_fire_time_changed
 
 from custom_components.media_queue.const import STORAGE_KEY
-from custom_components.media_queue.controller import Phase, QueueController
+from custom_components.media_queue.controller import (
+    STARTING_TIMEOUT,
+    Phase,
+    QueueController,
+)
 from custom_components.media_queue.manager import QueueManager
 
 from .common import (
@@ -595,4 +601,133 @@ async def test_unusable_text_duration_is_unknown(
     manager = await _started(hass, "a", "b")
     await _end(hass, freezer)
     assert len(log.calls) == 1
+    await manager.async_unload()
+
+
+class MPDConnectionError(Exception):
+    """Like mpd.ConnectionError: not a HomeAssistantError."""
+
+
+async def test_any_player_exception_is_a_failed_play(
+    hass: HomeAssistant, log: PlayerLog, freezer: FrozenDateTimeFactory
+) -> None:
+    """A library error (MPD down) is wrapped, recorded and skipped."""
+    manager = await _started(hass, "a", "b", "c")
+    controller = manager.controller(PLAYER)
+    log.fail = "b.mp3"
+    log.error = MPDConnectionError("Connection refused")
+    await _end(hass, freezer)
+    assert log.played == ["a.mp3", "b.mp3", "c.mp3"]
+    assert controller.queue.current == 2
+    error = controller.snapshot()["last_error"]
+    assert error["kind"] == "cannot_play"
+    assert error["title"] == "b"
+    assert error["message"] == "Connection refused"
+
+    with pytest.raises(HomeAssistantError) as err:
+        await controller.async_play(1)
+    assert err.value.translation_key == "cannot_play"
+    assert _phase(controller) is Phase.IDLE
+    await manager.async_unload()
+
+
+async def test_item_that_never_starts_is_skipped(
+    hass: HomeAssistant, log: PlayerLog, freezer: FrozenDateTimeFactory
+) -> None:
+    """play_media works but the player never plays: after a while, the next."""
+    manager = await _started(hass, "a", "b", "c")
+    controller = manager.controller(PLAYER)
+    plays = log.on_play
+    assert plays is not None
+
+    def all_but_b(call: ServiceCall) -> None:
+        if "b.mp3" not in call.data["media_content_id"]:
+            plays(call)
+
+    log.on_play = all_but_b
+    await _end(hass, freezer)
+    assert log.played == ["a.mp3", "b.mp3"]
+    assert _phase(controller) is Phase.STARTING
+
+    freezer.tick(timedelta(seconds=STARTING_TIMEOUT + 1))
+    async_fire_time_changed(hass)
+    await hass.async_block_till_done()
+
+    assert log.played == ["a.mp3", "b.mp3", "c.mp3"]
+    assert _phase(controller) is Phase.PLAYING
+    error = controller.snapshot()["last_error"]
+    assert error["kind"] == "did_not_start"
+    assert error["title"] == "b"
+    await manager.async_unload()
+
+
+async def test_nothing_starts_gives_up(
+    hass: HomeAssistant, log: PlayerLog, freezer: FrozenDateTimeFactory
+) -> None:
+    """Three items in a row that never start stop the queue."""
+    manager = await _started(hass, "a", "b", "c", "d", "e")
+    controller = manager.controller(PLAYER)
+    log.on_play = None
+    await _end(hass, freezer)
+    for _ in range(3):
+        freezer.tick(timedelta(seconds=STARTING_TIMEOUT + 1))
+        async_fire_time_changed(hass)
+        await hass.async_block_till_done()
+    assert log.played == ["a.mp3", "b.mp3", "c.mp3", "d.mp3"]
+    assert _phase(controller) is Phase.IDLE
+    await manager.async_unload()
+
+
+async def test_started_item_cancels_the_watchdog(
+    hass: HomeAssistant, log: PlayerLog, freezer: FrozenDateTimeFactory
+) -> None:
+    """An item that starts late (but in time) is followed, nothing skipped."""
+    manager = await _started(hass, "a", "b")
+    controller = manager.controller(PLAYER)
+    log.on_play = None
+    freezer.tick(timedelta(seconds=1))
+    await controller.async_play(1)
+    assert _phase(controller) is Phase.STARTING
+    freezer.tick(timedelta(seconds=10))
+    playing(hass, "id-b")
+    await hass.async_block_till_done()
+    freezer.tick(timedelta(seconds=STARTING_TIMEOUT))
+    async_fire_time_changed(hass)
+    await hass.async_block_till_done()
+    assert len(log.calls) == 2
+    assert _phase(controller) is Phase.PLAYING
+    assert controller.snapshot()["last_error"] is None
+    await manager.async_unload()
+
+
+async def test_unload_cancels_the_watchdog(
+    hass: HomeAssistant, log: PlayerLog, freezer: FrozenDateTimeFactory
+) -> None:
+    """No skipping after unloading."""
+    manager = await _started(hass, "a", "b")
+    controller = manager.controller(PLAYER)
+    log.on_play = None
+    await controller.async_play(1)
+    await manager.async_unload()
+    freezer.tick(timedelta(seconds=STARTING_TIMEOUT + 1))
+    async_fire_time_changed(hass)
+    await hass.async_block_till_done()
+    assert len(log.calls) == 2
+
+
+async def test_watchdog_after_the_item_was_removed(
+    hass: HomeAssistant, log: PlayerLog, freezer: FrozenDateTimeFactory
+) -> None:
+    """The item that did not start was removed meanwhile: no title, go on."""
+    manager = await _started(hass, "a", "b", "c")
+    controller = manager.controller(PLAYER)
+    log.on_play = None
+    freezer.tick(timedelta(seconds=1))
+    await controller.async_play(1)
+    controller.remove(1)
+    freezer.tick(timedelta(seconds=STARTING_TIMEOUT + 1))
+    async_fire_time_changed(hass)
+    await hass.async_block_till_done()
+    assert controller.snapshot()["last_error"]["title"] == ""
+    assert log.played[-1] == "c.mp3"
     await manager.async_unload()

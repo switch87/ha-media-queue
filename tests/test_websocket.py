@@ -74,6 +74,7 @@ async def test_get_empty(client: Client) -> None:
         "current": None,
         "next": None,
         "phase": "idle",
+        "last_error": None,
     }
 
 

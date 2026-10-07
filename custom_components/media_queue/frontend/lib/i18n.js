@@ -28,6 +28,8 @@ export const STRINGS = {
     added: "{count} added to the queue.",
     truncated: "Only the first {limit} items were added.",
     error: "Error: {message}",
+    error_cannot_play: "Cannot play \u201c{title}\u201d: {message}",
+    error_did_not_start: "\u201c{title}\u201d did not start; skipped.",
   },
   nl: {
     title: "Muziek",
@@ -56,6 +58,8 @@ export const STRINGS = {
     added: "{count} toegevoegd aan de wachtrij.",
     truncated: "Alleen de eerste {limit} items zijn toegevoegd.",
     error: "Fout: {message}",
+    error_cannot_play: "Kan \u201c{title}\u201d niet afspelen: {message}",
+    error_did_not_start: "\u201c{title}\u201d startte niet; overgeslagen.",
   },
 };
 

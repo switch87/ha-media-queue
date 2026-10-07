@@ -189,6 +189,7 @@ async def test_subscribers_get_snapshots(hass: HomeAssistant) -> None:
             "current": None,
             "next": 0,
             "phase": "idle",
+            "last_error": None,
         }
     ]
     assert other == []
@@ -209,5 +210,6 @@ async def test_snapshot_of_unknown_entity(hass: HomeAssistant) -> None:
         "current": None,
         "next": None,
         "phase": "idle",
+        "last_error": None,
     }
     await manager.async_unload()

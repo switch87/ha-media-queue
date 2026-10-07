@@ -36,7 +36,10 @@ from homeassistant.core import (
     callback,
 )
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
-from homeassistant.helpers.event import async_track_state_change_event
+from homeassistant.helpers.event import (
+    async_call_later,
+    async_track_state_change_event,
+)
 from homeassistant.util import dt as dt_util
 
 from .const import DOMAIN, QUEUE_LIMIT
@@ -53,6 +56,8 @@ END_TOLERANCE = 5.0
 RESTART_WINDOW = 15.0
 # Items that fail in a row before automatic advancing gives up.
 MAX_SKIPS = 3
+# Seconds a player may take to start an item before it counts as failed.
+STARTING_TIMEOUT = 25
 
 # "standby" is deprecated in HA but still reported by older integrations.
 _STOPPED_STATES = {
@@ -134,6 +139,10 @@ class QueueController:
         self._lock = asyncio.Lock()
         self._unsubscribe: CALLBACK_TYPE = _nothing
         self._tasks: set[asyncio.Task[None]] = set()
+        self._watchdog: CALLBACK_TYPE = _nothing
+        # Plays that failed in a row (reset when an item really starts).
+        self._failures = 0
+        self.last_error: dict[str, str] | None = None
         # State of the play call in progress (phase STARTING).
         self._calling = False
         self._call_started = dt_util.utcnow()
@@ -157,6 +166,7 @@ class QueueController:
         """Stop following the player and cancel an advance in progress."""
         self._unsubscribe()
         self._unsubscribe = _nothing
+        self._cancel_watchdog()
         for task in self._tasks:
             task.cancel()
 
@@ -192,6 +202,7 @@ class QueueController:
         async with self._lock:
             result = self.queue.add(expansion.items, mode, limit=QUEUE_LIMIT)
             if mode in (Mode.REPLACE, Mode.PLAY):
+                self._failures = 0
                 await self._play(result.start, context)
             else:
                 self.async_changed()
@@ -209,6 +220,7 @@ class QueueController:
                 raise ServiceValidationError(
                     translation_domain=DOMAIN, translation_key="end_of_queue"
                 )
+            self._failures = 0
             await self._play(index, context)
 
     async def async_previous(self, *, context: Context | None = None) -> None:
@@ -219,6 +231,7 @@ class QueueController:
                 raise ServiceValidationError(
                     translation_domain=DOMAIN, translation_key="queue_empty"
                 )
+            self._failures = 0
             await self._play(index, context)
 
     @callback
@@ -258,11 +271,13 @@ class QueueController:
     async def async_play(self, index: int, *, context: Context | None = None) -> None:
         """Play the item at index now."""
         async with self._lock:
+            self._failures = 0
             await self._play(index, context)
 
     async def _play(self, index: int, context: Context | None = None) -> None:
         """Play the item at index; the caller holds the lock."""
         self._check(index)
+        self._cancel_watchdog()
         item = self.queue.items[index]
         self.queue.set_current(index)
         before = self.hass.states.get(self.entity_id)
@@ -275,9 +290,9 @@ class QueueController:
         self.async_changed()
         try:
             await self._play_media(item, context)
-        except HomeAssistantError as err:
+        except Exception as err:  # players raise their own errors (MPD)
             self.phase = Phase.IDLE
-            self.async_changed()
+            self._error("cannot_play", item, str(err))
             raise HomeAssistantError(
                 translation_domain=DOMAIN,
                 translation_key="cannot_play",
@@ -292,6 +307,10 @@ class QueueController:
             and (self._before_state != MediaPlayerState.PLAYING or self._is_new(state))
         ):
             self._arm(state)
+        else:
+            self._watchdog = async_call_later(
+                self.hass, STARTING_TIMEOUT, self._starting_timed_out
+            )
 
     async def _play_media(self, item: QueueItem, context: Context | None) -> None:
         content_id = item.media_content_id
@@ -318,21 +337,51 @@ class QueueController:
         """Play the next item after a natural end, skipping failing items."""
         async with self._lock:
             index = self.queue.next_position
-            failures = 0
-            while index < len(self.queue.items) and failures < MAX_SKIPS:
+            while index < len(self.queue.items) and self._failures < MAX_SKIPS:
                 try:
                     await self._play(index)
                 except HomeAssistantError as err:
                     _LOGGER.warning(
                         "%s: skipping item %s: %s", self.entity_id, index, err
                     )
-                    failures += 1
+                    self._failures += 1
                     index += 1
                 else:
                     return
             self.phase = Phase.IDLE
             self.fingerprint = None
             self.async_changed()
+
+    @callback
+    def _starting_timed_out(self, _now: datetime) -> None:
+        """Skip the item the player did not start in time."""
+        self._watchdog = _nothing
+        current = self.queue.current
+        item = self.queue.items[current] if current is not None else None
+        self._failures += 1
+        self._error("did_not_start", item, "")
+        self._schedule_advance()
+
+    def _schedule_advance(self) -> None:
+        self.phase = Phase.STARTING  # until _advance has the lock
+        task = self.hass.async_create_background_task(
+            self._advance(), f"{DOMAIN} advance {self.entity_id}"
+        )
+        self._tasks.add(task)
+        task.add_done_callback(self._tasks.discard)
+
+    def _error(self, kind: str, item: QueueItem | None, message: str) -> None:
+        self.last_error = {
+            "kind": kind,
+            "title": item.title if item is not None else "",
+            "message": message,
+            "at": dt_util.utcnow().isoformat(),
+        }
+        self.async_changed()
+
+    def _cancel_watchdog(self) -> None:
+        self._watchdog()
+        self._watchdog = _nothing
 
     # ---------------------------------------------------------- state machine
 
@@ -378,12 +427,7 @@ class QueueController:
             return  # unavailable, buffering, …: wait and see
         at = new.last_changed
         if self._ended(old, at):
-            self.phase = Phase.STARTING  # until _advance has the lock
-            task = self.hass.async_create_background_task(
-                self._advance(), f"{DOMAIN} advance {self.entity_id}"
-            )
-            self._tasks.add(task)
-            task.add_done_callback(self._tasks.discard)
+            self._schedule_advance()
             return
         if self._playing_since is not None:
             self._played += (at - self._playing_since).total_seconds()
@@ -428,6 +472,8 @@ class QueueController:
         )
 
     def _arm(self, state: State) -> None:
+        self._cancel_watchdog()
+        self._failures = 0
         self.phase = Phase.PLAYING
         self.fingerprint = _content_id(state)
         self._played = 0.0
@@ -448,7 +494,7 @@ class QueueController:
 
     def snapshot(self) -> dict[str, Any]:
         """Return the state for the panel."""
-        return snapshot(self.entity_id, self.queue, self.phase)
+        return snapshot(self.entity_id, self.queue, self.phase, self.last_error)
 
     def as_dict(self) -> dict[str, Any]:
         """Return the data to store."""
@@ -477,7 +523,12 @@ class QueueController:
         return controller
 
 
-def snapshot(entity_id: str, queue: Queue, phase: Phase) -> dict[str, Any]:
+def snapshot(
+    entity_id: str,
+    queue: Queue,
+    phase: Phase,
+    last_error: dict[str, str] | None = None,
+) -> dict[str, Any]:
     """Return what the panel needs to show a queue."""
     upcoming = queue.next_position
     return {
@@ -486,4 +537,5 @@ def snapshot(entity_id: str, queue: Queue, phase: Phase) -> dict[str, Any]:
         "current": queue.current,
         "next": upcoming if upcoming < len(queue.items) else None,
         "phase": phase.value,
+        "last_error": last_error,
     }
