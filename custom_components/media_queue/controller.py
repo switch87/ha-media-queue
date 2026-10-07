@@ -294,7 +294,12 @@ class QueueController:
     async def _async_enrich(self, files: list[tuple[str, str, str]]) -> None:
         """Read tags batch by batch; each batch updates the queue once."""
         async with self._tag_lock:
-            while files:
+            while True:
+                # Items removed meanwhile (a clear, a replace) are not read.
+                present = {item.item_id for item in self.queue.items}
+                files = [file for file in files if file[0] in present]
+                if not files:
+                    return
                 try:
                     count, found = await asyncio.wait_for(
                         self.hass.async_add_executor_job(

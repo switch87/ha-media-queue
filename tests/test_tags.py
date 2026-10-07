@@ -475,3 +475,33 @@ async def test_tag_duration_ends_an_item_the_player_does_not_time(
     await hass.async_block_till_done(wait_background_tasks=True)
     assert log.played == ["a.mp3", "b.mp3"]
     await manager.async_unload()
+
+
+async def test_items_gone_before_reading_are_not_read(
+    hass: HomeAssistant, library: Path
+) -> None:
+    """A clear or remove before a batch skips those files; none left: stop."""
+    manager = await async_manager_with(hass)
+    controller = manager.controller(PLAYER)
+    asked: list[list[str]] = []
+
+    def spy(files: list[tuple[str, str, str]], budget: float) -> Any:
+        asked.append([relative for _, _, relative in files])
+        return tags.read_batch(files, budget)
+
+    with (
+        patch.object(controller_module, "read_batch", spy),
+        patch.object(controller_module, "TAG_BATCH", 2),
+    ):
+        await controller.async_add(ALBUM, Mode.ADD)  # the first batch starts
+        controller.remove(2)  # in the second batch
+        await hass.async_block_till_done(wait_background_tasks=True)
+        assert [len(batch) for batch in asked] == [2, 1]
+        assert all("Yeti/03 Eye-Shaking.mp3" not in batch for batch in asked)
+
+        asked.clear()
+        await controller.async_add(ALBUM, Mode.ADD)
+        controller.clear()
+        await hass.async_block_till_done(wait_background_tasks=True)
+        assert len(asked) == 1  # only the batch already under way
+    await manager.async_unload()
