@@ -49,6 +49,26 @@ position, from the time it played). Things that are *not* an end:
 
 Items that fail to play during advancing are skipped (at most 3 in a row).
 
+## What the players themselves do with each item
+
+The queue plays one item at a time with a plain `media_player.play_media`
+(no `enqueue`). What a player does with that call is up to its integration:
+
+- **MPD (core `mpd`)**: every `play_media` clears MPD's own playlist, adds the
+  one item and plays it. MPD's playlist therefore only ever holds the current
+  item; the queue lives in Home Assistant. MPD reports durations as text; that
+  is handled. **Turn MPD's repeat mode off**: with repeat on (and single off or
+  on), MPD replays the single item forever, never stops, and the queue never
+  moves on. Random/consume make no difference with one item.
+- **Sonos (core `sonos`)**: files and streams from the media sources are
+  played with Sonos's "play URI" path (Sonos's own queue is left alone).
+  Items from **Sonos favorites or the Sonos music library** (ids such as
+  `A:ALBUM/…`, `FV:…`) go through Sonos's queue-replacing path: each item
+  clears Sonos's queue and plays. The panel shows a note when you browse those
+  sections; the queue here still steps through them one by one.
+- Other players: whatever their `play_media` does for one item; the queue only
+  needs the player to report `playing` and, to advance, a duration.
+
 ## Actions (for automations and scripts)
 
 `media_queue.add` (`entity_id`, `media_content_id`, `media_content_type`,

@@ -1,7 +1,7 @@
 // The "Muziek" panel: library (left), queue (right), transport on top.
 // Plain web component, no build step; the logic lives in ./lib (tested with node).
 
-import { addMessage, browseMessage, itemActions, needsSigning } from "./lib/browse-actions.js";
+import { addMessage, browseMessage, itemActions, needsSigning, sourceNote } from "./lib/browse-actions.js";
 import { languageOf, translate } from "./lib/i18n.js";
 import { rememberPlayer, restorePlayer } from "./lib/player-memory.js";
 import { listPlayers, playersKey } from "./lib/players.js";
@@ -329,8 +329,15 @@ class MediaQueuePanel extends HTMLElement {
   _renderLibrary() {
     if (!this._libraryList) return;
     const player = this._player();
-    this._libraryNote.hidden = !player || player.canBrowse;
     const listing = this._listing;
+    const node = this._stack[this._stack.length - 1] ?? null;
+    const note = !player
+      ? null
+      : !player.canBrowse
+        ? "cannot_browse"
+        : sourceNote(this._hass?.entities?.[player.entityId], node);
+    this._libraryNote.hidden = !note;
+    this._libraryNote.textContent = note ? this.t(note) : "";
     const title = listing && listing !== "loading" ? listing.title : this.t("library");
     this._libraryHead.replaceChildren(
       h(

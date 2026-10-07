@@ -30,6 +30,8 @@ export const STRINGS = {
     error: "Error: {message}",
     error_cannot_play: "Cannot play \u201c{title}\u201d: {message}",
     error_did_not_start: "\u201c{title}\u201d did not start; skipped.",
+    note_sonos_library:
+      "Sonos plays these items by replacing its own queue; this queue still steps through them one by one.",
   },
   nl: {
     title: "Muziek",
@@ -60,6 +62,8 @@ export const STRINGS = {
     error: "Fout: {message}",
     error_cannot_play: "Kan \u201c{title}\u201d niet afspelen: {message}",
     error_did_not_start: "\u201c{title}\u201d startte niet; overgeslagen.",
+    note_sonos_library:
+      "Sonos speelt deze items door zijn eigen wachtrij te vervangen; deze wachtrij speelt ze wel een voor een af.",
   },
 };
 

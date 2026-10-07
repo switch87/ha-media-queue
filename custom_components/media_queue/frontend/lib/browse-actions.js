@@ -46,3 +46,14 @@ export function needsSigning(url) {
     typeof url === "string" && url.startsWith("/") && !url.includes("authSig=") && !url.includes("token=")
   );
 }
+
+/**
+ * Return the key of a note for the listed node, or null. Sonos plays items of
+ * its own library and favorites by replacing its own queue each time.
+ */
+export function sourceNote(entityEntry, node) {
+  if (entityEntry?.platform !== "sonos" || !node) {
+    return null;
+  }
+  return node.media_content_id.startsWith("media-source://") ? null : "note_sonos_library";
+}
