@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from pathlib import Path
 import sys
+from typing import Any, cast
 
 from mutagen.easyid3 import EasyID3
 
@@ -45,7 +46,7 @@ def write(path: Path, seconds: float, **tags: str) -> None:
     """Write a silent MP3 of seconds with the given tags."""
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(FRAME * round(seconds * FRAMES_PER_SECOND))
-    id3 = EasyID3()
+    id3 = cast(Any, EasyID3)()  # mutagen has no type hints
     for key, value in tags.items():
         id3[key] = value
     id3.save(path)
