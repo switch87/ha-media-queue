@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from homeassistant.auth.models import User
 from homeassistant.auth.permissions.const import POLICY_CONTROL, POLICY_READ
 from homeassistant.components.media_player.const import DOMAIN as MEDIA_PLAYER_DOMAIN
 from homeassistant.components.websocket_api import async_register_command
@@ -57,6 +58,22 @@ def _allow(connection: Connection, entity_id: str, policy: str) -> None:
         raise Unauthorized(entity_id=entity_id, permission=policy)
 
 
+def can_manage_playlists(hass: HomeAssistant, user: User) -> bool:
+    """Return whether user may rename or delete playlists.
+
+    Admins, and users who may control at least one media player.
+    """
+    return user.is_admin or any(
+        user.permissions.check_entity(state.entity_id, POLICY_CONTROL)
+        for state in hass.states.async_all(MEDIA_PLAYER_DOMAIN)
+    )
+
+
+def _allow_manage(hass: HomeAssistant, connection: Connection) -> None:
+    if not can_manage_playlists(hass, connection.user):
+        raise Unauthorized(permission=POLICY_CONTROL)
+
+
 @callback
 def async_register(hass: HomeAssistant) -> None:
     """Register the media_queue/* commands."""
@@ -72,6 +89,12 @@ def async_register(hass: HomeAssistant) -> None:
         ws_clear,
         ws_set_shuffle,
         ws_set_repeat,
+        ws_playlists_list,
+        ws_playlists_get,
+        ws_playlists_save,
+        ws_playlists_rename,
+        ws_playlists_delete,
+        ws_playlists_load,
     ):
         async_register_command(hass, command)
 
@@ -260,3 +283,107 @@ def ws_set_repeat(
     controller = async_get_manager(hass).existing(msg["entity_id"])
     controller.set_repeat(Repeat(msg["repeat"]))
     connection.send_result(msg["id"])
+
+
+# ------------------------------------------------------------------ playlists
+
+PLAYLIST_ID: dict[str | vol.Marker, Any] = {
+    vol.Required("playlist_id"): vol.All(cv.string, vol.Length(max=64))
+}
+# The library allows 100 characters after trimming; this only bounds the input.
+NAME = vol.All(cv.string, vol.Length(max=200))
+
+
+@websocket_command({vol.Required("type"): "media_queue/playlists/list"})
+@callback
+def ws_playlists_list(
+    hass: HomeAssistant, connection: Connection, msg: dict[str, Any]
+) -> None:
+    """Return the summaries of every saved playlist."""
+    library = async_get_manager(hass).library
+    connection.send_result(msg["id"], {"playlists": library.summaries()})
+
+
+@websocket_command({vol.Required("type"): "media_queue/playlists/get", **PLAYLIST_ID})
+@callback
+def ws_playlists_get(
+    hass: HomeAssistant, connection: Connection, msg: dict[str, Any]
+) -> None:
+    """Return a playlist with its items."""
+    playlist = async_get_manager(hass).library.get(msg["playlist_id"])
+    connection.send_result(msg["id"], playlist.as_dict())
+
+
+@websocket_command(
+    {
+        vol.Required("type"): "media_queue/playlists/save",
+        **ENTITY,
+        vol.Required("name"): NAME,
+        vol.Optional("overwrite", default=False): cv.boolean,
+    }
+)
+@callback
+def ws_playlists_save(
+    hass: HomeAssistant, connection: Connection, msg: dict[str, Any]
+) -> None:
+    """Save a player's queue (in its shown order) as a playlist."""
+    _allow(connection, msg["entity_id"], POLICY_CONTROL)
+    manager = async_get_manager(hass)
+    controller = manager.get(msg["entity_id"])
+    items = controller.queue.items if controller is not None else []
+    playlist = manager.library.save(msg["name"], items, overwrite=msg["overwrite"])
+    connection.send_result(msg["id"], playlist.summary())
+
+
+@websocket_command(
+    {
+        vol.Required("type"): "media_queue/playlists/rename",
+        **PLAYLIST_ID,
+        vol.Required("name"): NAME,
+    }
+)
+@callback
+def ws_playlists_rename(
+    hass: HomeAssistant, connection: Connection, msg: dict[str, Any]
+) -> None:
+    """Give a playlist another name."""
+    _allow_manage(hass, connection)
+    library = async_get_manager(hass).library
+    library.rename(msg["playlist_id"], msg["name"])
+    connection.send_result(msg["id"], library.get(msg["playlist_id"]).summary())
+
+
+@websocket_command(
+    {vol.Required("type"): "media_queue/playlists/delete", **PLAYLIST_ID}
+)
+@callback
+def ws_playlists_delete(
+    hass: HomeAssistant, connection: Connection, msg: dict[str, Any]
+) -> None:
+    """Delete a playlist."""
+    _allow_manage(hass, connection)
+    async_get_manager(hass).library.delete(msg["playlist_id"])
+    connection.send_result(msg["id"])
+
+
+@websocket_command(
+    {
+        vol.Required("type"): "media_queue/playlists/load",
+        **ENTITY,
+        **PLAYLIST_ID,
+        vol.Optional("mode", default=Mode.ADD.value): vol.In([m.value for m in Mode]),
+        vol.Optional("item_id"): cv.string,
+    }
+)
+@async_response
+async def ws_playlists_load(
+    hass: HomeAssistant, connection: Connection, msg: dict[str, Any]
+) -> None:
+    """Put a playlist (or one of its tracks) in a player's queue."""
+    _allow(connection, msg["entity_id"], POLICY_CONTROL)
+    manager = async_get_manager(hass)
+    items = manager.library.get(msg["playlist_id"]).pick(msg.get("item_id"))
+    result = await manager.controller(msg["entity_id"]).async_add_items(
+        items, Mode(msg["mode"]), context=connection.context(msg)
+    )
+    connection.send_result(msg["id"], result)
