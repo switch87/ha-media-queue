@@ -46,3 +46,27 @@ test("labels of the shuffle and repeat buttons", () => {
   assert.equal(translate("nl", "repeat_one"), "Herhalen: huidig item");
   assert.equal(translate("en", "shuffle_on"), "Shuffle: on");
 });
+
+test("labels of the playlist library", () => {
+  for (const key of [
+    "playlists",
+    "save_playlist",
+    "playlist_name",
+    "save",
+    "cancel",
+    "overwrite",
+    "overwrite_question",
+    "saved",
+    "rename",
+    "renamed",
+    "delete",
+    "delete_question",
+    "deleted",
+    "invalid_name",
+    "no_playlists",
+  ]) {
+    assert.notEqual(translate("en", key), key, key);
+  }
+  assert.equal(translate("nl", "playlists"), "Afspeellijsten");
+  assert.equal(translate("en", "overwrite_question", { name: "Mix" }), "A playlist called “Mix” already exists. Overwrite it?");
+});
