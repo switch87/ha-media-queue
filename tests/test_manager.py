@@ -383,3 +383,19 @@ async def test_settings_of_an_empty_queue_are_saved(
     assert set(queues) == {PLAYER, "media_player.kitchen"}
     assert queues[PLAYER]["shuffle"] is True
     assert queues["media_player.kitchen"]["repeat"] == "one"
+
+
+async def test_migration_of_data_that_is_no_mapping(
+    hass: HomeAssistant, hass_storage: dict[str, Any]
+) -> None:
+    """Stored data that is not a mapping is left as it is and loads nothing."""
+    hass_storage[STORAGE_KEY] = {
+        "version": 1,
+        "minor_version": 1,
+        "key": STORAGE_KEY,
+        "data": ["x"],
+    }
+    manager = QueueManager(hass)
+    await manager.async_load()
+    assert manager.entity_ids == []
+    await manager.async_unload()

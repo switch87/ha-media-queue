@@ -40,7 +40,7 @@ class QueueStore(Store[dict[str, Any]]):
         self, old_major_version: int, old_minor_version: int, old_data: Any
     ) -> dict[str, Any]:
         """Add the 0.2.0 settings to queues stored by 0.1.0."""
-        queues = old_data.get("queues")
+        queues = old_data.get("queues") if isinstance(old_data, dict) else None
         if old_minor_version < 2 and isinstance(queues, dict):
             for raw in queues.values():
                 if isinstance(raw, dict):
@@ -72,8 +72,8 @@ class QueueManager:
 
     async def async_load(self) -> None:
         """Restore the stored queues."""
-        data = await self._store.async_load() or {}
-        queues = data.get("queues")
+        data = await self._store.async_load()
+        queues = data.get("queues") if isinstance(data, dict) else None
         if not isinstance(queues, dict):
             return
         for entity_id, raw in queues.items():
