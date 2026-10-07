@@ -10,6 +10,7 @@ from enum import StrEnum
 import logging
 import math
 from typing import Any
+from uuid import uuid4
 
 from homeassistant.components import media_source
 from homeassistant.components.media_player.browse_media import (
@@ -45,7 +46,7 @@ from homeassistant.util import dt as dt_util
 
 from .const import DOMAIN, QUEUE_LIMIT
 from .expand import AddRequest, async_expand
-from .model import Mode, Queue, QueueItem, Repeat
+from .model import AddResult, Mode, Queue, QueueItem, Repeat
 from .tags import Tags, local_file, read_batch
 
 _LOGGER = logging.getLogger(__name__)
@@ -220,16 +221,28 @@ class QueueController:
                     "item": request.title or request.media_content_id
                 },
             )
-        async with self._lock:
-            result = self.queue.add(expansion.items, mode, limit=QUEUE_LIMIT)
-            self.async_changed()
-            self._enrich(expansion.items[: result.added])
-            if mode in (Mode.REPLACE, Mode.PLAY):
-                self._failures = 0
-                await self._play(result.start, context)
+        result = await self._async_insert(expansion.items, mode, context, tagged=False)
         return {
             "added": result.added,
             "truncated": expansion.truncated or result.truncated,
+            "limit": QUEUE_LIMIT,
+        }
+
+    async def async_add_items(
+        self, items: list[QueueItem], mode: Mode, *, context: Context | None = None
+    ) -> dict[str, Any]:
+        """Add copies of known items (a saved playlist), without browsing."""
+        if mode is not Mode.REPLACE and len(self.queue.items) >= QUEUE_LIMIT:
+            raise ServiceValidationError(
+                translation_domain=DOMAIN,
+                translation_key="queue_full",
+                translation_placeholders={"limit": str(QUEUE_LIMIT)},
+            )
+        copies = [dataclasses.replace(item, item_id=uuid4().hex) for item in items]
+        added = await self._async_insert(copies, mode, context, tagged=True)
+        return {
+            "added": added.added,
+            "truncated": added.truncated,
             "limit": QUEUE_LIMIT,
         }
 
@@ -277,6 +290,29 @@ class QueueController:
         """Remove every item; a playing item plays on, then the queue stops."""
         self.queue.clear()
         self.async_changed()
+
+    async def _async_insert(
+        self,
+        items: list[QueueItem],
+        mode: Mode,
+        context: Context | None,
+        *,
+        tagged: bool,
+    ) -> AddResult:
+        """Put items in the queue; replace and play start the first of them.
+
+        tagged: the items may carry tags already; only those without a
+        duration get their tags read.
+        """
+        async with self._lock:
+            result = self.queue.add(items, mode, limit=QUEUE_LIMIT)
+            self.async_changed()
+            added = items[: result.added]
+            self._enrich([i for i in added if not tagged or i.duration is None])
+            if mode in (Mode.REPLACE, Mode.PLAY):
+                self._failures = 0
+                await self._play(result.start, context)
+        return result
 
     def _enrich(self, items: list[QueueItem]) -> None:
         """Read the tags of new local items in the background."""

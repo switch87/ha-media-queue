@@ -21,6 +21,7 @@ from .const import (
     STORAGE_VERSION,
 )
 from .controller import Change, Phase, QueueController, snapshot
+from .library import PlaylistLibrary
 from .model import Queue, Repeat
 
 type Subscriber = Callable[[dict[str, Any]], None]
@@ -64,6 +65,7 @@ class QueueManager:
         self._unloaded = False
         # Until when a soon save (after a queue edit) is pending.
         self._soon_save_until = dt_util.utcnow()
+        self.library = PlaylistLibrary(hass)
 
     @property
     def entity_ids(self) -> list[str]:
@@ -72,6 +74,7 @@ class QueueManager:
 
     async def async_load(self) -> None:
         """Restore the stored queues."""
+        await self.library.async_load()
         data = await self._store.async_load()
         queues = data.get("queues") if isinstance(data, dict) else None
         if not isinstance(queues, dict):
@@ -95,6 +98,7 @@ class QueueManager:
                     on_close()
         self._subscribers.clear()
         await self._store.async_save(self._data())
+        await self.library.async_unload()
 
     def get(self, entity_id: str) -> QueueController | None:
         """Return the controller of entity_id if it has one."""

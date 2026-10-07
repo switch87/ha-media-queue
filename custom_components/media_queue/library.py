@@ -54,6 +54,15 @@ class Playlist:
     created: str
     updated: str
 
+    def pick(self, item_id: str | None) -> list[QueueItem]:
+        """Return every item, or only the one with item_id."""
+        if item_id is None:
+            return list(self.items)
+        for item in self.items:
+            if item.item_id == item_id:
+                return [item]
+        raise _invalid("unknown_item", item_id=item_id)
+
     def summary(self) -> dict[str, Any]:
         """Return what a list of playlists shows."""
         durations = [item.duration for item in self.items if item.duration]
