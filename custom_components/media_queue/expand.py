@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 import logging
+import mimetypes
+from pathlib import Path
 import re
 from urllib.parse import unquote
 
@@ -13,12 +15,14 @@ from homeassistant.components.media_player.browse_media import BrowseMedia
 from homeassistant.components.media_player.const import (
     MediaClass,
     MediaPlayerEntityFeature,
+    MediaType,
 )
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 
 from .const import DOMAIN
 from .model import QueueItem
+from .playlist import is_playlist, read_playlist
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -104,6 +108,8 @@ async def async_expand(
     """Return the playable items below request, at most limit of them."""
     if limit <= 0:
         return Expansion(truncated=True)
+    if (playlist := _local_playlist(hass, request.media_content_id)) is not None:
+        return await _expand_playlist(hass, request, *playlist, limit=limit)
     if request.can_expand is False:
         return Expansion(items=[_leaf(request)])
     walker = _Walker(hass, entity_id, limit)
@@ -227,6 +233,62 @@ def _ordered(node: BrowseMedia) -> list[BrowseMedia]:
     if node.media_content_id.startswith(LOCAL_MEDIA):
         children.sort(key=lambda child: (child.can_play, _natural(child.title)))
     return children
+
+
+def _local_playlist(hass: HomeAssistant, content_id: str) -> tuple[str, str] | None:
+    """Return (media dir, path) when content_id is a playlist of local media."""
+    if not content_id.startswith(LOCAL_MEDIA):
+        return None
+    media_dir, _, relative = content_id.removeprefix(LOCAL_MEDIA).partition("/")
+    if media_dir in hass.config.media_dirs and is_playlist(relative):
+        return media_dir, relative
+    return None
+
+
+async def _expand_playlist(
+    hass: HomeAssistant,
+    request: AddRequest,
+    media_dir: str,
+    relative: str,
+    *,
+    limit: int,
+) -> Expansion:
+    """Return the entries of a local playlist as queue items."""
+    root = Path(hass.config.media_dirs[media_dir])
+    try:
+        items = await hass.async_add_executor_job(
+            _playlist_items, root, media_dir, relative
+        )
+    except (OSError, ValueError) as err:
+        raise ServiceValidationError(
+            translation_domain=DOMAIN,
+            translation_key="cannot_browse",
+            translation_placeholders={
+                "item": request.title or request.media_content_id
+            },
+        ) from err
+    return Expansion(items=items[:limit], truncated=len(items) > limit)
+
+
+def _playlist_items(root: Path, media_dir: str, relative: str) -> list[QueueItem]:
+    """Read a playlist and return its entries as items (runs in the executor)."""
+    items: list[QueueItem] = []
+    for entry in read_playlist(root, relative):
+        name = unquote(entry.target.rstrip("/").rsplit("/", 1)[-1])
+        if entry.kind == "url":
+            content_id, content_type = entry.target, MediaType.MUSIC.value
+        else:
+            content_id = f"{LOCAL_MEDIA}{media_dir}/{entry.target}"
+            content_type = mimetypes.guess_type(entry.target)[0] or "audio/mpeg"
+        items.append(
+            QueueItem(
+                media_content_id=content_id,
+                media_content_type=content_type,
+                title=clean_title(entry.title or name),
+                media_class=MediaClass.MUSIC.value,
+            )
+        )
+    return items
 
 
 def _leaf(request: AddRequest) -> QueueItem:

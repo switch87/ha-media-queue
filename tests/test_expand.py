@@ -475,3 +475,74 @@ async def test_local_files_in_natural_order_without_videos(
     hass.states.async_set(PLAYER, "idle", {"device_class": "tv"})
     result = await async_expand(hass, PLAYER, request, limit=10)
     assert _titles(result.items) == ["1 One.mp3", "2 Two.mp3", "10 Ten.mp3", "clip.mp4"]
+
+
+async def test_playlist_is_expanded(hass: HomeAssistant, library: Path) -> None:
+    """Adding a playlist queues its entries as media-source items, in order."""
+    lists = library / "Afspeellijsten"
+    lists.mkdir()
+    (lists / "Fav.m3u").write_text(
+        "#EXTM3U\n"
+        "#EXTINF:239,Amon Düül II - Archangels\n"
+        "../Amon Düül II/Yeti/02 Archangels Thunderbird.mp3\n"
+        "../Amon Düül II/Yeti/01 Soap Shop Rock.mp3\n"
+        "https://radio.example/live.mp3\n",
+        encoding="utf-8",
+    )
+    request = AddRequest(
+        media_content_id=f"{LOCAL}/local/Afspeellijsten/Fav.m3u",
+        media_content_type="audio/x-mpegurl",
+        title="Fav.m3u",
+        can_expand=False,
+    )
+    result = await async_expand(hass, PLAYER, request, limit=10)
+    assert _titles(result.items) == [
+        "Amon Düül II - Archangels",
+        "01 Soap Shop Rock.mp3",
+        "live.mp3",
+    ]
+    first, _, radio = result.items
+    assert first.media_content_id == (
+        f"{LOCAL}/local/Amon Düül II/Yeti/02 Archangels Thunderbird.mp3"
+    )
+    assert first.media_content_type == "audio/mpeg"
+    assert first.media_class == "music"
+    assert radio.media_content_id == "https://radio.example/live.mp3"
+    assert radio.media_content_type == "music"
+
+    result = await async_expand(hass, PLAYER, request, limit=2)
+    assert len(result.items) == 2
+    assert result.truncated is True
+
+
+async def test_unreadable_playlist(hass: HomeAssistant, library: Path) -> None:
+    """A missing playlist or one outside the media folder cannot be opened."""
+    for name in ("missing.m3u", "../../escape.m3u"):
+        with pytest.raises(ServiceValidationError) as err:
+            await async_expand(
+                hass,
+                PLAYER,
+                AddRequest(
+                    media_content_id=f"{LOCAL}/local/{name}",
+                    media_content_type="audio/x-mpegurl",
+                    can_expand=False,
+                ),
+                limit=10,
+            )
+        assert err.value.translation_key == "cannot_browse"
+
+
+async def test_playlist_of_another_source_is_a_leaf(hass: HomeAssistant) -> None:
+    """Playlists not on the local media source are played as they are."""
+    for content_id in ("http://nas/list.m3u", f"{LOCAL}/unknown_dir/list.m3u"):
+        result = await async_expand(
+            hass,
+            PLAYER,
+            AddRequest(
+                media_content_id=content_id,
+                media_content_type="audio/x-mpegurl",
+                can_expand=False,
+            ),
+            limit=10,
+        )
+        assert [item.media_content_id for item in result.items] == [content_id]
