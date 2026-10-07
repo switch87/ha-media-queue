@@ -55,7 +55,7 @@ async def test_leaf_is_queued_as_given(hass: HomeAssistant) -> None:
             media_content_type="music",
             title="Radio",
             media_class="channel",
-            thumbnail="/radio.png",
+            thumbnail="https://radio.example/logo.png",
             can_expand=False,
         ),
         limit=10,
@@ -66,7 +66,7 @@ async def test_leaf_is_queued_as_given(hass: HomeAssistant) -> None:
     assert item.media_content_type == "music"
     assert item.title == "Radio"
     assert item.media_class == "channel"
-    assert item.thumbnail == "/radio.png"
+    assert item.thumbnail == "https://radio.example/logo.png"
 
 
 async def test_media_source_folder_is_expanded(
@@ -145,7 +145,10 @@ async def test_player_tree_is_expanded(hass: HomeAssistant) -> None:
             "album-1": folder(
                 "album-1",
                 "Album 1",
-                [node("t1", "Track 1", thumbnail="/t1.jpg"), node("t2", "Track 2")],
+                [
+                    node("t1", "Track 1", thumbnail="/media/local/t1.jpg"),
+                    node("t2", "Track 2"),
+                ],
                 can_play=True,
             ),
             "playlist": folder("playlist", "Playlist", [], can_play=True),
@@ -162,7 +165,7 @@ async def test_player_tree_is_expanded(hass: HomeAssistant) -> None:
     )
 
     assert _titles(result.items) == ["Track 1", "Track 2", "Loose track", "Playlist"]
-    assert result.items[0].thumbnail == "/t1.jpg"
+    assert result.items[0].thumbnail == "/media/local/t1.jpg"
     assert result.items[0].media_content_type == "track"
     assert result.items[3].media_content_type == "album"
     assert player.browsed == ["artist", "album-1", "playlist", "broken", "unlisted"]
@@ -390,3 +393,65 @@ async def test_single_image_can_be_queued(hass: HomeAssistant) -> None:
         limit=10,
     )
     assert _titles(result.items) == ["Pic"]
+
+
+@pytest.mark.parametrize(
+    ("thumbnail", "kept"),
+    [
+        ("https://img.example/a.jpg", True),
+        ("http://nas/cover.jpg", True),
+        ("/api/media_player_proxy/media_player.a?token=x", True),
+        ("/api/image_proxy/image.a", True),
+        ("/api/brands/integration/sonos/logo.png", True),
+        ("/media/local/cover.jpg", True),
+        ("javascript:alert(1)", False),
+        ("data:image/png;base64,AAAA", False),
+        ("/api/states", False),
+        ("https://img.example/" + "x" * 3000, False),
+    ],
+)
+async def test_thumbnails_are_checked(
+    hass: HomeAssistant, thumbnail: str, kept: bool
+) -> None:
+    """Only image URLs of the web or of Home Assistant's media paths are kept."""
+    result = await async_expand(
+        hass,
+        PLAYER,
+        AddRequest(
+            media_content_id="x",
+            media_content_type="music",
+            thumbnail=thumbnail,
+            can_expand=False,
+        ),
+        limit=10,
+    )
+    assert result.items[0].thumbnail == (thumbnail if kept else None)
+
+
+async def test_titles_are_trimmed_and_capped(hass: HomeAssistant) -> None:
+    """Long titles (from callers or sources) are cut at 300 characters."""
+    player = FakePlayer(
+        "Fake",
+        {"a": folder("a", "A", [node("t", "  " + "y" * 400, thumbnail="evil:x")])},
+    )
+    await async_add_players(hass, player)
+    result = await async_expand(
+        hass,
+        PLAYER,
+        AddRequest(media_content_id="a", media_content_type="album"),
+        limit=10,
+    )
+    assert result.items[0].title == "y" * 300
+    assert result.items[0].thumbnail is None
+    result = await async_expand(
+        hass,
+        PLAYER,
+        AddRequest(
+            media_content_id="x",
+            media_content_type="music",
+            title="z" * 400,
+            can_expand=False,
+        ),
+        limit=10,
+    )
+    assert result.items[0].title == "z" * 300

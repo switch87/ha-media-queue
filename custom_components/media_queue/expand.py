@@ -35,6 +35,31 @@ PLAYLIST_TYPES = {
 }
 
 
+MAX_TITLE = 300
+MAX_THUMBNAIL = 2000
+# Thumbnails the panel may load: web images and Home Assistant's media paths.
+THUMBNAIL_PREFIXES = (
+    "http://",
+    "https://",
+    "/api/media_player_proxy/",
+    "/api/image_proxy/",
+    "/api/brands/",
+    "/media/",
+)
+
+
+def clean_title(title: str) -> str:
+    """Return the title trimmed and capped."""
+    return title.strip()[:MAX_TITLE]
+
+
+def clean_thumbnail(url: str | None) -> str | None:
+    """Return url if it is an image URL the panel may load, else None."""
+    if url and len(url) <= MAX_THUMBNAIL and url.startswith(THUMBNAIL_PREFIXES):
+        return url
+    return None
+
+
 @dataclass(frozen=True, slots=True, kw_only=True)
 class AddRequest:
     """An item to add, as the panel or a service call describes it."""
@@ -155,9 +180,9 @@ class _Walker:
             QueueItem(
                 media_content_id=item.media_content_id,
                 media_content_type=item.media_content_type,
-                title=item.title,
+                title=clean_title(item.title),
                 media_class=str(item.media_class) if item.media_class else None,
-                thumbnail=item.thumbnail,
+                thumbnail=clean_thumbnail(item.thumbnail),
             )
         )
 
@@ -176,7 +201,7 @@ def _leaf(request: AddRequest) -> QueueItem:
     return QueueItem(
         media_content_id=request.media_content_id,
         media_content_type=request.media_content_type,
-        title=title,
+        title=clean_title(title),
         media_class=request.media_class,
-        thumbnail=request.thumbnail,
+        thumbnail=clean_thumbnail(request.thumbnail),
     )
