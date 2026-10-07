@@ -50,13 +50,13 @@ async def test_config_flow_creates_one_entry(hass: HomeAssistant) -> None:
 async def test_setup_registers_the_panel(
     hass: HomeAssistant, hass_client: ClientSessionGenerator
 ) -> None:
-    """The sidebar gets "Muziek"; its module is served from a versioned path."""
+    """The sidebar gets "Music"; its module is served from a versioned path."""
     entry = await _setup(hass)
     assert entry.state is ConfigEntryState.LOADED
     assert isinstance(entry.runtime_data, QueueManager)
 
     panel = hass.data[DATA_PANELS]["media-queue"]
-    assert panel.sidebar_title == "Muziek"
+    assert panel.sidebar_title == "Music"
     assert panel.sidebar_icon == "mdi:playlist-music"
     assert panel.require_admin is False
     assert panel.component_name == "custom"
@@ -85,6 +85,13 @@ async def test_unload_removes_the_panel_and_saves(
     assert await hass.config_entries.async_unload(entry.entry_id)
     assert "media-queue" not in hass.data[DATA_PANELS]
     assert hass_storage[STORAGE_KEY]["data"]["queues"][PLAYER]["items"]
+
+
+async def test_dutch_sidebar_title(hass: HomeAssistant) -> None:
+    """Dutch installations see "Muziek" in the sidebar."""
+    hass.config.language = "nl"
+    await _setup(hass)
+    assert hass.data[DATA_PANELS]["media-queue"].sidebar_title == "Muziek"
 
 
 async def test_reload_keeps_the_static_path(hass: HomeAssistant) -> None:

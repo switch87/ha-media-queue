@@ -14,7 +14,9 @@ from .const import DOMAIN
 
 PANEL_PATH = "media-queue"
 ELEMENT = "media-queue-panel"
-SIDEBAR_TITLE = "Muziek"
+# The sidebar title is not translated by HA for custom panels: pick it here.
+SIDEBAR_TITLES = {"nl": "Muziek"}
+SIDEBAR_TITLE = "Music"
 SIDEBAR_ICON = "mdi:playlist-music"
 URL_BASE = f"/{DOMAIN}_frontend"
 FRONTEND_DIR = Path(__file__).parent / "frontend"
@@ -37,7 +39,9 @@ async def async_register(hass: HomeAssistant) -> None:
         hass,
         frontend_url_path=PANEL_PATH,
         webcomponent_name=ELEMENT,
-        sidebar_title=SIDEBAR_TITLE,
+        sidebar_title=SIDEBAR_TITLES.get(
+            hass.config.language.split("-")[0], SIDEBAR_TITLE
+        ),
         sidebar_icon=SIDEBAR_ICON,
         module_url=f"{url}/{ELEMENT}.js",
         require_admin=False,
