@@ -361,3 +361,123 @@ MIT licence. Added LICENSE, `.github/workflows/validate.yml` (hacs/action with
 100 %, mypy, ruff, node tests), tests for hassfest's manifest key order and
 service icons, a community README and CONTRIBUTING.md. The sidebar title now
 follows the installation's language ("Music", Dutch "Muziek").
+
+---
+
+# Addendum: 0.4.0 — complete playlists, listening history, stream URLs
+
+Three wishes from Gert, through the Pi agent (2026-10-07). Same rules as
+before: TDD (a test that fails on an assertion about the missing behaviour
+first), 100 % line + branch coverage, `mypy --strict`, `ruff`, node tests at
+100 % for `frontend/lib`.
+
+## 1. Tags in saved playlists (the bug the Pi hit)
+
+Saving a queue right after an add stored the items as they were *then*: the
+background tag reading had not reached them, so artist, album and duration
+were missing (a playlist of about five hours showed 58 minutes).
+
+- The tag reading of 0.2.0 is moved out of `controller.py` into
+  **`enrich.py`** (`TagReader`): the same batches (at most `TAG_BATCH` files
+  or `TAG_BUDGET` seconds per batch), the same cover-art-skipping reader, the
+  same 30 s guard per batch and 10 minute pause per *source* after a hung
+  mount. A source is a player's queue or the playlist library; each has its
+  own reader, so a stuck mount never pauses the other.
+- A `TagTarget` is what a reader fills: `tag_ids()` (the items still there),
+  `apply_tags()` (put the tags on them, return whether anything changed) and
+  `tags_changed()` (tell the world / schedule a store write).
+  `QueueController` and `PlaylistLibrary` are both targets.
+- **Repair pass** `PlaylistLibrary.repair()`: every playlist item that lacks
+  an artist *or* a duration and whose media id is a local media file is read
+  in the background, playlist by playlist, and written through the library's
+  usual delayed save (5 s). It runs
+  - at **setup** (after `async_load`), so the playlists already stored on the
+    Pi are completed without saving them again,
+  - after a **save** and after a **load** (`PlaylistLibrary.load()`), so a
+    queue saved before its tags were read is completed right away.
+  One pass at a time (`TagReader.busy`); a pass that finds nothing starts no
+  task at all.
+- Nothing blocks the event loop: the reading itself stays in the executor.
+
+## 2. Listening history and "Most played"
+
+- **`history.py`**, `ListeningHistory`: own store `media_queue.history`
+  (version 1), one entry per media id with `count`, `last_played` and the
+  title/artist/album/duration/thumbnail as known, `HISTORY_MAX` 2000 entries
+  (the least played and oldest are dropped). Loading is tolerant: malformed
+  entries are skipped (a new store needs no migration code; unknown data is
+  ignored the way `Queue.from_dict` ignores it).
+- **What counts as a play**: an item that really played `PLAY_SECONDS` (30 s)
+  or half its duration, whichever comes first — measured by the controller
+  from the player's own state changes (the seconds it was in `playing`), so a
+  skip or a stop before that counts for nothing. Counted once per start of an
+  item (`repeat one` counts every repetition). Counted for every player.
+- **Only real tracks**: a known duration and a media id that is not a bare
+  `http(s)` URL. Radio and other streams have no duration (and a stream URL
+  entered by hand is a URL), so they are never counted.
+- **Writes**: at most one delayed save every `HISTORY_SAVE_DELAY` (5 minutes)
+  while music plays, plus a soon save (5 s) when a player stops or the queue
+  ends, and a save at unload. Easy on the SD card.
+- **"Most played"** (`Meest beluisterd` on Dutch installations) is a
+  **virtual playlist** in the library: id `most_played`, always first in the
+  list, at most `MOST_PLAYED_MAX` (100) tracks, ordered by count descending
+  then last played descending. It is built from the history on demand, so it
+  is always current. It cannot be renamed, deleted or overwritten
+  (`playlist_readonly`), and a name clash with it is refused like any other.
+  Item ids are derived from the media id (`uuid5`), so the panel can load one
+  of its tracks. It shows in the panel's Playlists folder and in Home
+  Assistant's own media browser, like every playlist.
+- **API**: websocket `media_queue/history/{list,reset}`, actions
+  `media_queue.get_history` (response only) and `media_queue.reset_history`.
+  Reading is open to every logged-in user; resetting needs an admin or a user
+  who may control a media player (like renaming a playlist).
+- Diagnostics: the number of tracks and the total number of plays only.
+- Removing the integration deletes the history store too.
+
+## 3. Stream URLs from the Muziek page
+
+- **`stream.py`**: `async_expand_url`. Only `http` and `https` with a host
+  are accepted (`invalid_url`); `file://`, `media-source://` and the rest are
+  refused before any request. A URL whose path ends in `.m3u`, `.m3u8` or
+  `.pls` is fetched (HA's shared aiohttp session, `STREAM_TIMEOUT` 10 s, at
+  most `MAX_PLAYLIST_BYTES` 256 kB) and expanded with the readers of
+  `playlist.py`; entries are resolved against the playlist URL and only
+  `http(s)` entries are kept. Everything else becomes one stream item without
+  a request (nothing is probed, nothing is downloaded).
+  Errors are translated: `stream_unreachable` (timeout, connection, HTTP
+  status), `stream_bad_content` (a content type that is neither a playlist
+  nor text) and `stream_empty` (a playlist without usable entries).
+- Items: the URL as media id, `music` as type, the given name or the file
+  name from the URL as title. They are added through the normal modes
+  (replace / add / next / play), so shuffle and repeat apply as always; no
+  tags are read for them.
+- **API**: websocket `media_queue/add_url` and action `media_queue.add_url`
+  (`entity_id`, `url`, `mode`, `title`), control of the player required.
+- **Favourites**: a URL is saved as a favourite with
+  `media_queue/streams/save` (`url`, `name`, `overwrite`) — it becomes an
+  ordinary saved playlist with the expanded items, so it is listed in the
+  Playlists folder, plays with ▶ ⏭ ➕ and can be renamed and deleted with the
+  code that is already there. No second kind of storage.
+- **Panel**: a row under the library header with the URL field and ▶ ⏭ ➕ 💾
+  (`frontend/lib/streams.js`: cleaning and validating the URL, the messages,
+  the title suggestion).
+
+## Tasks 0.4.0
+
+33. `enrich.py`: `TagReader`/`TagTarget` out of the controller (no behaviour
+    change), controller as a target.
+34. `PlaylistLibrary` as a tag target + `repair()`, called on setup, save and
+    load.
+35. `history.py`: entries, store, record, top list, reset, pruning.
+36. Controller: measure what really played, count a play, flush on stop.
+37. Library: the virtual "Most played" playlist; rename/delete/overwrite
+    refused.
+38. Websocket + actions for the history; strings, icons, services.yaml.
+39. `stream.py`: validation, playlist fetching and expansion, errors.
+40. `add_url` and `streams/save` (favourites) in the websocket API and the
+    actions.
+41. Frontend logic `streams.js`, playlist nodes for the read-only playlist,
+    labels.
+42. Panel: the stream row.
+43. Diagnostics, store removal, manifest 0.4.0.
+44. README, CHANGELOG, e2e on the dev HA with English screenshots.
