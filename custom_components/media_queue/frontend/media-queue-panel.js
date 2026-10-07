@@ -728,4 +728,6 @@ class MediaQueuePanel extends HTMLElement {
   }
 }
 
-customElements.define("media-queue-panel", MediaQueuePanel);
+if (!customElements.get("media-queue-panel")) {
+  customElements.define("media-queue-panel", MediaQueuePanel);
+}
