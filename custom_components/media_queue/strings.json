@@ -1,0 +1,162 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "description": "Adds a play queue to every media player and the \"Muziek\" page in the sidebar."
+      }
+    },
+    "abort": {
+      "single_instance_allowed": "[%key:common::config_flow::abort::single_instance_allowed%]"
+    }
+  },
+  "exceptions": {
+    "cannot_browse": {
+      "message": "Cannot open \"{item}\" to find its tracks."
+    },
+    "cannot_play": {
+      "message": "Cannot play \"{title}\": {error}"
+    },
+    "end_of_queue": {
+      "message": "There is no next item in the queue."
+    },
+    "invalid_index": {
+      "message": "There is no item {index} in the queue ({count} items)."
+    },
+    "not_loaded": {
+      "message": "The media queue integration is not loaded."
+    },
+    "nothing_to_add": {
+      "message": "\"{item}\" contains nothing that can be played."
+    },
+    "queue_empty": {
+      "message": "The queue is empty."
+    },
+    "queue_full": {
+      "message": "The queue is full ({limit} items)."
+    }
+  },
+  "selector": {
+    "mode": {
+      "options": {
+        "replace": "Play now (replace the queue)",
+        "add": "Add to the end of the queue",
+        "next": "Play next",
+        "play": "Play now (keep the queue)"
+      }
+    }
+  },
+  "services": {
+    "add": {
+      "name": "Add to queue",
+      "description": "Adds a track, album, folder or artist from the media browser to a player's queue.",
+      "fields": {
+        "entity_id": {
+          "name": "Player",
+          "description": "The media player whose queue to change."
+        },
+        "media_content_id": {
+          "name": "Content ID",
+          "description": "The media ID, as in the media browser (media-source://… or an ID of the player)."
+        },
+        "media_content_type": {
+          "name": "Content type",
+          "description": "The media content type, as in the media browser."
+        },
+        "mode": {
+          "name": "Mode",
+          "description": "Where the items go and whether they play now."
+        },
+        "title": {
+          "name": "Title",
+          "description": "Title to show for a single item."
+        }
+      }
+    },
+    "play_index": {
+      "name": "Play queue item",
+      "description": "Plays the item at a position in the queue (0 is the first).",
+      "fields": {
+        "entity_id": {
+          "name": "[%key:component::media_queue::services::add::fields::entity_id::name%]",
+          "description": "[%key:component::media_queue::services::add::fields::entity_id::description%]"
+        },
+        "index": {
+          "name": "Position",
+          "description": "Position in the queue, 0 is the first item."
+        }
+      }
+    },
+    "next": {
+      "name": "Next in queue",
+      "description": "Plays the next item of the queue.",
+      "fields": {
+        "entity_id": {
+          "name": "[%key:component::media_queue::services::add::fields::entity_id::name%]",
+          "description": "[%key:component::media_queue::services::add::fields::entity_id::description%]"
+        }
+      }
+    },
+    "previous": {
+      "name": "Previous in queue",
+      "description": "Plays the previous item of the queue.",
+      "fields": {
+        "entity_id": {
+          "name": "[%key:component::media_queue::services::add::fields::entity_id::name%]",
+          "description": "[%key:component::media_queue::services::add::fields::entity_id::description%]"
+        }
+      }
+    },
+    "remove": {
+      "name": "Remove from queue",
+      "description": "Removes the item at a position from the queue.",
+      "fields": {
+        "entity_id": {
+          "name": "[%key:component::media_queue::services::add::fields::entity_id::name%]",
+          "description": "[%key:component::media_queue::services::add::fields::entity_id::description%]"
+        },
+        "index": {
+          "name": "[%key:component::media_queue::services::play_index::fields::index::name%]",
+          "description": "[%key:component::media_queue::services::play_index::fields::index::description%]"
+        }
+      }
+    },
+    "move": {
+      "name": "Move in queue",
+      "description": "Moves an item to another position in the queue.",
+      "fields": {
+        "entity_id": {
+          "name": "[%key:component::media_queue::services::add::fields::entity_id::name%]",
+          "description": "[%key:component::media_queue::services::add::fields::entity_id::description%]"
+        },
+        "from_index": {
+          "name": "From position",
+          "description": "Current position of the item."
+        },
+        "to_index": {
+          "name": "To position",
+          "description": "New position of the item."
+        }
+      }
+    },
+    "clear": {
+      "name": "Clear queue",
+      "description": "Removes every item from the queue; what plays now keeps playing.",
+      "fields": {
+        "entity_id": {
+          "name": "[%key:component::media_queue::services::add::fields::entity_id::name%]",
+          "description": "[%key:component::media_queue::services::add::fields::entity_id::description%]"
+        }
+      }
+    },
+    "get_queue": {
+      "name": "Get queue",
+      "description": "Returns the queue of a player: its items and the current position.",
+      "fields": {
+        "entity_id": {
+          "name": "[%key:component::media_queue::services::add::fields::entity_id::name%]",
+          "description": "[%key:component::media_queue::services::add::fields::entity_id::description%]"
+        }
+      }
+    }
+  }
+}

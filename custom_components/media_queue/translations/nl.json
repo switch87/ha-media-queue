@@ -1,0 +1,162 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "description": "Voegt een afspeelwachtrij toe aan elke mediaspeler en de pagina \"Muziek\" in de zijbalk."
+      }
+    },
+    "abort": {
+      "single_instance_allowed": "Al geconfigureerd. Slechts één configuratie mogelijk."
+    }
+  },
+  "exceptions": {
+    "cannot_browse": {
+      "message": "Kan \"{item}\" niet openen om de nummers te vinden."
+    },
+    "cannot_play": {
+      "message": "Kan \"{title}\" niet afspelen: {error}"
+    },
+    "end_of_queue": {
+      "message": "Er is geen volgend item in de wachtrij."
+    },
+    "invalid_index": {
+      "message": "Er is geen item {index} in de wachtrij ({count} items)."
+    },
+    "not_loaded": {
+      "message": "De integratie mediawachtrij is niet geladen."
+    },
+    "nothing_to_add": {
+      "message": "\"{item}\" bevat niets dat afgespeeld kan worden."
+    },
+    "queue_empty": {
+      "message": "De wachtrij is leeg."
+    },
+    "queue_full": {
+      "message": "De wachtrij is vol ({limit} items)."
+    }
+  },
+  "selector": {
+    "mode": {
+      "options": {
+        "replace": "Nu afspelen (wachtrij vervangen)",
+        "add": "Achteraan de wachtrij toevoegen",
+        "next": "Hierna afspelen",
+        "play": "Nu afspelen (wachtrij behouden)"
+      }
+    }
+  },
+  "services": {
+    "add": {
+      "name": "Toevoegen aan wachtrij",
+      "description": "Voegt een nummer, album, map of artiest uit de mediabrowser toe aan de wachtrij van een speler.",
+      "fields": {
+        "entity_id": {
+          "name": "Speler",
+          "description": "De mediaspeler waarvan de wachtrij verandert."
+        },
+        "media_content_id": {
+          "name": "Content-ID",
+          "description": "De media-ID zoals in de mediabrowser (media-source://… of een ID van de speler)."
+        },
+        "media_content_type": {
+          "name": "Contenttype",
+          "description": "Het mediacontenttype zoals in de mediabrowser."
+        },
+        "mode": {
+          "name": "Modus",
+          "description": "Waar de items komen en of ze nu spelen."
+        },
+        "title": {
+          "name": "Titel",
+          "description": "Titel om te tonen voor een enkel item."
+        }
+      }
+    },
+    "play_index": {
+      "name": "Wachtrij-item afspelen",
+      "description": "Speelt het item op een positie in de wachtrij (0 is het eerste).",
+      "fields": {
+        "entity_id": {
+          "name": "Speler",
+          "description": "De mediaspeler waarvan de wachtrij verandert."
+        },
+        "index": {
+          "name": "Positie",
+          "description": "Positie in de wachtrij, 0 is het eerste item."
+        }
+      }
+    },
+    "next": {
+      "name": "Volgende in wachtrij",
+      "description": "Speelt het volgende item van de wachtrij.",
+      "fields": {
+        "entity_id": {
+          "name": "Speler",
+          "description": "De mediaspeler waarvan de wachtrij verandert."
+        }
+      }
+    },
+    "previous": {
+      "name": "Vorige in wachtrij",
+      "description": "Speelt het vorige item van de wachtrij.",
+      "fields": {
+        "entity_id": {
+          "name": "Speler",
+          "description": "De mediaspeler waarvan de wachtrij verandert."
+        }
+      }
+    },
+    "remove": {
+      "name": "Uit wachtrij verwijderen",
+      "description": "Verwijdert het item op een positie uit de wachtrij.",
+      "fields": {
+        "entity_id": {
+          "name": "Speler",
+          "description": "De mediaspeler waarvan de wachtrij verandert."
+        },
+        "index": {
+          "name": "Positie",
+          "description": "Positie in de wachtrij, 0 is het eerste item."
+        }
+      }
+    },
+    "move": {
+      "name": "Verplaatsen in wachtrij",
+      "description": "Verplaatst een item naar een andere positie in de wachtrij.",
+      "fields": {
+        "entity_id": {
+          "name": "Speler",
+          "description": "De mediaspeler waarvan de wachtrij verandert."
+        },
+        "from_index": {
+          "name": "Van positie",
+          "description": "Huidige positie van het item."
+        },
+        "to_index": {
+          "name": "Naar positie",
+          "description": "Nieuwe positie van het item."
+        }
+      }
+    },
+    "clear": {
+      "name": "Wachtrij leegmaken",
+      "description": "Verwijdert alle items uit de wachtrij; wat nu speelt, speelt verder.",
+      "fields": {
+        "entity_id": {
+          "name": "Speler",
+          "description": "De mediaspeler waarvan de wachtrij verandert."
+        }
+      }
+    },
+    "get_queue": {
+      "name": "Wachtrij opvragen",
+      "description": "Geeft de wachtrij van een speler: de items en de huidige positie.",
+      "fields": {
+        "entity_id": {
+          "name": "Speler",
+          "description": "De mediaspeler waarvan de wachtrij verandert."
+        }
+      }
+    }
+  }
+}
