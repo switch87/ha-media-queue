@@ -82,6 +82,7 @@ test("the add message carries what the backend needs", () => {
 test("only unsigned local thumbnails need signing", () => {
   assert.equal(needsSigning("/api/media_player_proxy/x"), true);
   assert.equal(needsSigning("/api/x?authSig=abc"), false);
+  assert.equal(needsSigning("/api/media_player_proxy/media_player.a?token=t&cache=1"), false);
   assert.equal(needsSigning("https://img/x.jpg"), false);
   assert.equal(needsSigning(null), false);
 });

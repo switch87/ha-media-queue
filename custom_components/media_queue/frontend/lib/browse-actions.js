@@ -40,7 +40,9 @@ export function addMessage(entityId, item, mode) {
   };
 }
 
-/** Return the thumbnail URL, or null when it must be signed first. */
+/** Return whether a relative HA URL needs a signature (none and no token yet). */
 export function needsSigning(url) {
-  return typeof url === "string" && url.startsWith("/") && !url.includes("authSig=");
+  return (
+    typeof url === "string" && url.startsWith("/") && !url.includes("authSig=") && !url.includes("token=")
+  );
 }
