@@ -49,6 +49,13 @@
         "next": "Hierna afspelen",
         "play": "Nu afspelen (wachtrij behouden)"
       }
+    },
+    "repeat": {
+      "options": {
+        "off": "Uit",
+        "all": "De wachtrij herhalen",
+        "one": "Het huidige item herhalen"
+      }
     }
   },
   "services": {
@@ -163,6 +170,34 @@
         "entity_id": {
           "name": "Speler",
           "description": "De mediaspeler waarvan de wachtrij verandert."
+        }
+      }
+    },
+    "set_shuffle": {
+      "name": "Wachtrij shufflen",
+      "description": "Speelt de wachtrij van een speler in volgorde of door elkaar. Het huidige item blijft het huidige; shuffle uitzetten zet de oorspronkelijke volgorde terug.",
+      "fields": {
+        "entity_id": {
+          "name": "Speler",
+          "description": "De mediaspeler waarvan de wachtrij verandert."
+        },
+        "shuffle": {
+          "name": "Shuffle",
+          "description": "Aan: door elkaar; uit: in de oorspronkelijke volgorde."
+        }
+      }
+    },
+    "set_repeat": {
+      "name": "Wachtrij herhalen",
+      "description": "Herhaalt niets, de hele wachtrij of het huidige item. De eigen herhaalstand van de speler blijft onaangeroerd.",
+      "fields": {
+        "entity_id": {
+          "name": "Speler",
+          "description": "De mediaspeler waarvan de wachtrij verandert."
+        },
+        "repeat": {
+          "name": "Herhalen",
+          "description": "Uit, de hele wachtrij of het huidige item."
         }
       }
     },

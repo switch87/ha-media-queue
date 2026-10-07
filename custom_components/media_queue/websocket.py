@@ -21,7 +21,7 @@ import voluptuous as vol
 from .controller import QueueController
 from .expand import AddRequest
 from .manager import async_get_manager
-from .model import Mode
+from .model import Mode, Repeat
 
 ENTITY: dict[str | vol.Marker, Any] = {
     vol.Required("entity_id"): cv.entity_domain(MEDIA_PLAYER_DOMAIN)
@@ -70,6 +70,8 @@ def async_register(hass: HomeAssistant) -> None:
         ws_remove,
         ws_move,
         ws_clear,
+        ws_set_shuffle,
+        ws_set_repeat,
     ):
         async_register_command(hass, command)
 
@@ -222,4 +224,39 @@ def ws_clear(hass: HomeAssistant, connection: Connection, msg: dict[str, Any]) -
     """Remove every item."""
     _allow(connection, msg["entity_id"], POLICY_CONTROL)
     async_get_manager(hass).existing(msg["entity_id"]).clear()
+    connection.send_result(msg["id"])
+
+
+@websocket_command(
+    {
+        vol.Required("type"): "media_queue/set_shuffle",
+        **ENTITY,
+        vol.Required("shuffle"): cv.boolean,
+    }
+)
+@callback
+def ws_set_shuffle(
+    hass: HomeAssistant, connection: Connection, msg: dict[str, Any]
+) -> None:
+    """Play the queue in order or shuffled."""
+    _allow(connection, msg["entity_id"], POLICY_CONTROL)
+    async_get_manager(hass).existing(msg["entity_id"]).set_shuffle(msg["shuffle"])
+    connection.send_result(msg["id"])
+
+
+@websocket_command(
+    {
+        vol.Required("type"): "media_queue/set_repeat",
+        **ENTITY,
+        vol.Required("repeat"): vol.In([r.value for r in Repeat]),
+    }
+)
+@callback
+def ws_set_repeat(
+    hass: HomeAssistant, connection: Connection, msg: dict[str, Any]
+) -> None:
+    """Repeat nothing, the queue or the current item."""
+    _allow(connection, msg["entity_id"], POLICY_CONTROL)
+    controller = async_get_manager(hass).existing(msg["entity_id"])
+    controller.set_repeat(Repeat(msg["repeat"]))
     connection.send_result(msg["id"])

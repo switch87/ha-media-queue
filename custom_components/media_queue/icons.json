@@ -7,6 +7,8 @@
     "remove": { "service": "mdi:playlist-remove" },
     "move": { "service": "mdi:swap-vertical" },
     "clear": { "service": "mdi:playlist-remove" },
+    "set_shuffle": { "service": "mdi:shuffle-variant" },
+    "set_repeat": { "service": "mdi:repeat" },
     "get_queue": { "service": "mdi:playlist-music" }
   }
 }

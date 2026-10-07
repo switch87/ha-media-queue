@@ -49,6 +49,13 @@
         "next": "Play next",
         "play": "Play now (keep the queue)"
       }
+    },
+    "repeat": {
+      "options": {
+        "off": "Off",
+        "all": "Repeat the queue",
+        "one": "Repeat the current item"
+      }
     }
   },
   "services": {
@@ -163,6 +170,34 @@
         "entity_id": {
           "name": "Player",
           "description": "The media player whose queue to change."
+        }
+      }
+    },
+    "set_shuffle": {
+      "name": "Shuffle queue",
+      "description": "Plays a player's queue in order or shuffled. The current item stays current; turning shuffle off restores the original order.",
+      "fields": {
+        "entity_id": {
+          "name": "Player",
+          "description": "The media player whose queue to change."
+        },
+        "shuffle": {
+          "name": "Shuffle",
+          "description": "On: shuffled; off: in the original order."
+        }
+      }
+    },
+    "set_repeat": {
+      "name": "Repeat queue",
+      "description": "Repeats nothing, the whole queue or the current item. The player's own repeat mode is not touched.",
+      "fields": {
+        "entity_id": {
+          "name": "Player",
+          "description": "The media player whose queue to change."
+        },
+        "repeat": {
+          "name": "Repeat",
+          "description": "Off, the whole queue, or the current item."
         }
       }
     },

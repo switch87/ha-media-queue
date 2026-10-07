@@ -146,3 +146,24 @@ async def test_unknown_player(hass: HomeAssistant, log: PlayerLog) -> None:
             DOMAIN, "clear", {"entity_id": "media_player.ghost"}, blocking=True
         )
     assert err.value.translation_key == "unknown_player"
+
+
+async def test_shuffle_and_repeat(hass: HomeAssistant, log: PlayerLog) -> None:
+    """Automations can set shuffle and repeat."""
+    await _call(hass, "add", media_content_id=f"{LOCAL}/Yeti", media_content_type="")
+    await _call(hass, "set_shuffle", shuffle=True)
+    await _call(hass, "set_repeat", repeat="one")
+    queue = await _call(hass, "get_queue", response=True)
+    assert isinstance(queue, dict)
+    assert queue["shuffle"] is True
+    assert queue["repeat"] == "one"
+    await _call(hass, "set_shuffle", shuffle=False)
+    await _call(hass, "set_repeat", repeat="off")
+    queue = await _call(hass, "get_queue", response=True)
+    assert isinstance(queue, dict)
+    assert [item["title"] for item in queue["items"]] == [f"{t}.mp3" for t in "abcde"]
+    assert queue["repeat"] == "off"
+    with pytest.raises(vol.Invalid):
+        await _call(hass, "set_repeat", repeat="twice")
+    with pytest.raises(vol.Invalid):
+        await _call(hass, "set_shuffle")

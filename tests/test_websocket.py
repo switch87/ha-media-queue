@@ -259,3 +259,49 @@ async def test_unknown_player_is_refused_without_creating_a_queue(
 
     hass.states.async_set("media_player.ghost", "idle")
     assert (await client.call("clear", entity_id="media_player.ghost"))["success"]
+
+
+async def test_shuffle_and_repeat(
+    hass: HomeAssistant, client: Client, log: PlayerLog
+) -> None:
+    """The panel turns shuffle on and off and cycles repeat."""
+    hass.states.async_set(PLAYER, "idle")
+    await client.call("add", entity_id=PLAYER, mode="add", **FOLDER)
+    reply = await client.call("set_shuffle", entity_id=PLAYER, shuffle=True)
+    assert reply["success"]
+    reply = await client.call("set_repeat", entity_id=PLAYER, repeat="all")
+    assert reply["success"]
+    queue = (await client.call("get", entity_id=PLAYER))["result"]
+    assert queue["shuffle"] is True
+    assert queue["repeat"] == "all"
+    assert sorted(item["title"] for item in queue["items"]) == [
+        f"{t}.mp3" for t in "abcde"
+    ]
+
+    await client.call("set_shuffle", entity_id=PLAYER, shuffle=False)
+    queue = (await client.call("get", entity_id=PLAYER))["result"]
+    assert [item["title"] for item in queue["items"]] == [f"{t}.mp3" for t in "abcde"]
+
+    reply = await client.call("set_repeat", entity_id=PLAYER, repeat="twice")
+    assert reply["error"]["code"] == "invalid_format"
+    for command, data in (
+        ("set_shuffle", {"shuffle": True}),
+        ("set_repeat", {"repeat": "one"}),
+    ):
+        reply = await client.call(command, entity_id="media_player.ghost", **data)
+        assert reply["error"]["translation_key"] == "unknown_player", command
+
+
+async def test_read_only_user_cannot_shuffle(
+    hass: HomeAssistant,
+    hass_ws_client: WebSocketGenerator,
+    hass_read_only_access_token: str,
+    log: PlayerLog,
+) -> None:
+    """Shuffle and repeat need control of the player."""
+    hass.states.async_set(PLAYER, "idle")
+    client = Client(await hass_ws_client(hass, hass_read_only_access_token))
+    reply = await client.call("set_shuffle", entity_id=PLAYER, shuffle=True)
+    assert reply["error"]["code"] == "unauthorized"
+    reply = await client.call("set_repeat", entity_id=PLAYER, repeat="one")
+    assert reply["error"]["code"] == "unauthorized"

@@ -77,6 +77,27 @@ clear:
   fields:
     entity_id: *entity
 
+set_shuffle:
+  fields:
+    entity_id: *entity
+    shuffle:
+      required: true
+      selector:
+        boolean:
+
+set_repeat:
+  fields:
+    entity_id: *entity
+    repeat:
+      required: true
+      selector:
+        select:
+          translation_key: repeat
+          options:
+            - "off"
+            - all
+            - one
+
 get_queue:
   fields:
     entity_id: *entity

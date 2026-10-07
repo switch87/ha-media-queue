@@ -23,7 +23,7 @@ from .const import DOMAIN
 from .controller import QueueController
 from .expand import AddRequest
 from .manager import async_get_manager
-from .model import Mode
+from .model import Mode, Repeat
 
 INDEX = vol.All(vol.Coerce(int), vol.Range(min=0))
 ENTITY: dict[str | vol.Marker, Any] = {
@@ -93,6 +93,14 @@ async def _clear(controller: QueueController, call: ServiceCall) -> None:
     controller.clear()
 
 
+async def _set_shuffle(controller: QueueController, call: ServiceCall) -> None:
+    controller.set_shuffle(call.data["shuffle"])
+
+
+async def _set_repeat(controller: QueueController, call: ServiceCall) -> None:
+    controller.set_repeat(Repeat(call.data["repeat"]))
+
+
 async def _get_queue(controller: QueueController, call: ServiceCall) -> ServiceResponse:
     return controller.snapshot()
 
@@ -137,6 +145,18 @@ _SERVICES: list[tuple[str, Handler, dict[str | vol.Marker, Any], SupportsRespons
         SupportsResponse.NONE,
     ),
     ("clear", _clear, {}, SupportsResponse.NONE),
+    (
+        "set_shuffle",
+        _set_shuffle,
+        {vol.Required("shuffle"): cv.boolean},
+        SupportsResponse.NONE,
+    ),
+    (
+        "set_repeat",
+        _set_repeat,
+        {vol.Required("repeat"): vol.In([repeat.value for repeat in Repeat])},
+        SupportsResponse.NONE,
+    ),
     ("get_queue", _get_queue, {}, SupportsResponse.ONLY),
 ]
 
