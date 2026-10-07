@@ -3,6 +3,8 @@ target-version = "py314"
 [lint]
 select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF", "D", "PT", "ASYNC", "PL", "TRY", "RET"]
 ignore = ["D203", "D213", "PLR2004", "PLR0913", "TRY003"]
+# Titles are shown as "title – artist" (en dash).
+allowed-confusables = ["–"]
 
 [lint.isort]
 force-sort-within-sections = true
