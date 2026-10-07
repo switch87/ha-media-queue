@@ -57,7 +57,9 @@ const STYLE = `
   li .thumb { width: 40px; height: 40px; border-radius: 4px; object-fit: cover; flex: none; display: flex;
     align-items: center; justify-content: center; color: var(--secondary-text-color); background: var(--secondary-background-color); }
   li .title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: default; }
+  li button.title { display: block; text-align: left; border-radius: 4px; padding: 4px; font: inherit; }
   li .title.link { cursor: pointer; }
+  button:focus-visible { outline: 2px solid var(--primary-color); outline-offset: 1px; }
   li .title.link:hover { text-decoration: underline; }
   li.current { background: rgba(var(--rgb-primary-color, 3, 169, 244), 0.15); }
   li.current .title { font-weight: 600; color: var(--primary-color); }
@@ -197,8 +199,8 @@ class MediaQueuePanel extends HTMLElement {
     this._queueList = h("ul");
     this._toast = h("div", { class: "toast", role: "status" });
     this._tabButtons = {
-      library: h("button", { onclick: () => this._showTab("library") }, this.t("library")),
-      queue: h("button", { onclick: () => this._showTab("queue") }, this.t("queue")),
+      library: h("button", { role: "tab", onclick: () => this._showTab("library") }, this.t("library")),
+      queue: h("button", { role: "tab", onclick: () => this._showTab("queue") }, this.t("queue")),
     };
     root.append(
       h(
@@ -217,7 +219,7 @@ class MediaQueuePanel extends HTMLElement {
         this._picker,
       ),
       this._now,
-      h("nav", { class: "tabs" }, this._tabButtons.library, this._tabButtons.queue),
+      h("nav", { class: "tabs", role: "tablist" }, this._tabButtons.library, this._tabButtons.queue),
       h(
         "div",
         { class: "columns" },
@@ -241,7 +243,10 @@ class MediaQueuePanel extends HTMLElement {
     this._tab = tab;
     this._root.classList.toggle("tab-library", tab === "library");
     this._root.classList.toggle("tab-queue", tab === "queue");
-    for (const [name, button] of Object.entries(this._tabButtons)) button.classList.toggle("active", name === tab);
+    for (const [name, button] of Object.entries(this._tabButtons)) {
+      button.classList.toggle("active", name === tab);
+      button.setAttribute("aria-selected", String(name === tab));
+    }
   }
 
   // ----------------------------------------------------------------- player
@@ -398,15 +403,17 @@ class MediaQueuePanel extends HTMLElement {
       "li",
       {},
       this._thumb(item.thumbnail, item.can_expand ? "mdi:folder-music" : "mdi:music-note"),
-      h(
-        "span",
-        {
-          class: actions.open ? "title link" : "title",
-          title: item.title,
-          onclick: actions.open ? () => this._openNode(item) : undefined,
-        },
-        item.title,
-      ),
+      actions.open
+        ? h(
+            "button",
+            {
+              class: "title link",
+              title: `${this.t("open")}: ${item.title}`,
+              onclick: () => this._openNode(item),
+            },
+            item.title,
+          )
+        : h("span", { class: "title", title: item.title }, item.title),
       h(
         "span",
         { class: "actions" },
@@ -508,10 +515,10 @@ class MediaQueuePanel extends HTMLElement {
           ),
           this._thumb(row.thumbnail, "mdi:music-note"),
           h(
-            "span",
+            "button",
             {
               class: "title link",
-              title: items[row.index].title,
+              title: `${this.t("play")}: ${items[row.index].title}`,
               onclick: () => this._call({ type: "media_queue/play_index", item_id: row.id }),
             },
             row.title,
