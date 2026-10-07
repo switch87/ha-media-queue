@@ -45,12 +45,16 @@ class QueueManager:
             return
         for entity_id, raw in queues.items():
             if _is_player(entity_id) and isinstance(raw, dict):
-                self._controllers[entity_id] = QueueController.from_dict(
+                controller = QueueController.from_dict(
                     self.hass, entity_id, raw, self._changed
                 )
+                controller.async_start()
+                self._controllers[entity_id] = controller
 
     async def async_unload(self) -> None:
-        """Write pending changes now."""
+        """Stop following the players and write pending changes now."""
+        for controller in self._controllers.values():
+            controller.async_stop()
         await self._store.async_save(self._data())
 
     def get(self, entity_id: str) -> QueueController | None:
@@ -62,6 +66,7 @@ class QueueManager:
         if (existing := self._controllers.get(entity_id)) is not None:
             return existing
         created = QueueController(self.hass, entity_id, self._changed)
+        created.async_start()
         self._controllers[entity_id] = created
         return created
 
