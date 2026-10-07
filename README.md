@@ -126,7 +126,8 @@ media browser gives it.
   over a network mount (CIFS) expect a few milliseconds per file.
 - A tag title wins over `#EXTINF`, which wins over the file name. Files over
   1 GiB are skipped; a batch that does not return within 30 s (a hung mount)
-  ends the reading for that add and the file names stay.
+  ends the reading for that add, the file names stay, and that player reads
+  no tags for 10 minutes (logged once).
 - The duration from the tags is also used to recognise the end of an item
   when the player does not report a duration itself (radio and streams still
   never end by themselves: they have no tags).

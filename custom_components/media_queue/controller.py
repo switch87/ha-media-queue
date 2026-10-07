@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Callable
 import dataclasses
-from datetime import datetime
+from datetime import datetime, timedelta
 from enum import StrEnum
 import logging
 import math
@@ -64,6 +64,8 @@ TAG_LIMIT = 1000
 TAG_BATCH = 100
 TAG_BUDGET = 2.0
 TAG_TIMEOUT = 30
+# After a batch timed out (a hung mount), no tags for this player for a while.
+TAG_PAUSE = timedelta(minutes=10)
 # Seconds a player may take to start an item before it counts as failed.
 STARTING_TIMEOUT = 25
 
@@ -155,6 +157,7 @@ class QueueController:
         self._lock = asyncio.Lock()
         # One tag reading at a time per player.
         self._tag_lock = asyncio.Lock()
+        self._tags_paused_until = dt_util.utcnow()
         self._unsubscribe: CALLBACK_TYPE = _nothing
         self._tasks: set[asyncio.Task[None]] = set()
         self._watchdog: CALLBACK_TYPE = _nothing
@@ -283,7 +286,7 @@ class QueueController:
             for item in items[:TAG_LIMIT]
             if (found := local_file(media_dirs, item.media_content_id)) is not None
         ]
-        if not files:
+        if not files or dt_util.utcnow() < self._tags_paused_until:
             return
         task = self.hass.async_create_background_task(
             self._async_enrich(files), f"{DOMAIN} tags {self.entity_id}"
@@ -309,9 +312,12 @@ class QueueController:
                     )
                 except TimeoutError:
                     _LOGGER.warning(
-                        "%s: reading tags takes too long; keeping file names",
+                        "%s: reading tags takes too long; keeping file names "
+                        "and reading no tags for this player for %s",
                         self.entity_id,
+                        TAG_PAUSE,
                     )
+                    self._tags_paused_until = dt_util.utcnow() + TAG_PAUSE
                     return
                 files = files[count:]
                 if self._apply_tags(found):

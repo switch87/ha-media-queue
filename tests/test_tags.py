@@ -505,3 +505,30 @@ async def test_items_gone_before_reading_are_not_read(
         await hass.async_block_till_done(wait_background_tasks=True)
         assert len(asked) == 1  # only the batch already under way
     await manager.async_unload()
+
+
+async def test_a_timeout_pauses_tags_for_that_player(
+    hass: HomeAssistant,
+    library: Path,
+    freezer: FrozenDateTimeFactory,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """After a hung batch the player reads no tags for 10 minutes (logged once)."""
+    manager = await async_manager_with(hass)
+    controller = manager.controller(PLAYER)
+    with patch.object(controller_module, "TAG_TIMEOUT", 0):
+        await controller.async_add(ALBUM, Mode.ADD)
+        await hass.async_block_till_done(wait_background_tasks=True)
+
+    with patch.object(controller_module, "read_batch") as reader:
+        freezer.tick(timedelta(minutes=9))
+        await controller.async_add(ALBUM, Mode.ADD)
+        await hass.async_block_till_done(wait_background_tasks=True)
+        reader.assert_not_called()
+    assert caplog.text.count("reading tags") == 1
+
+    freezer.tick(timedelta(minutes=2))
+    await controller.async_add(ALBUM, Mode.ADD)
+    await hass.async_block_till_done(wait_background_tasks=True)
+    assert controller.queue.items[-4].title == "Soap Shop Rock"
+    await manager.async_unload()
