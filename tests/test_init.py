@@ -63,7 +63,7 @@ async def test_setup_registers_the_panel(
     assert panel.config is not None
     custom: dict[str, Any] = panel.config["_panel_custom"]
     assert custom["name"] == "media-queue-panel"
-    assert custom["module_url"] == "/media_queue_frontend/0.2.0/media-queue-panel.js"
+    assert custom["module_url"] == "/media_queue_frontend/0.3.0/media-queue-panel.js"
     assert custom["embed_iframe"] is False
 
     client = await hass_client()

@@ -1,5 +1,38 @@
 # Changelog
 
+## 0.3.0 — 2026-10-07
+
+### Added
+
+- **Playlist library** shared by all players: save a player's queue as a
+  named playlist (the queue's shown order, with titles, artists, albums and
+  durations as known; any source: local files, DLNA, radio URLs, …), load it
+  into any player's queue with Play / Play next / Add (shuffle and repeat
+  apply as for any add), load a single track of it, rename and delete.
+  Names are 1–100 characters and unique regardless of case; at most 1000
+  items per playlist and 500 playlists. Stored in `.storage/media_queue.playlists`
+  (delayed save).
+- Muziek page: a save button above the queue (asks before overwriting an
+  existing name) and a **Playlists** folder at the top of the library for
+  every player, with play/next/add, open (tracks with their own buttons),
+  rename and delete (confirmed).
+- Websocket commands `media_queue/playlists/{list,get,save,rename,delete,load}`
+  and actions `media_queue.save_playlist`, `load_playlist`, `rename_playlist`,
+  `delete_playlist`, `get_playlists`. Saving and loading need control of the
+  player; renaming and deleting need an admin or a user who may control at
+  least one media player; listing is open to every user.
+- The playlists as a **media source** ("Playlists (Media queue)",
+  "Afspeellijsten (Muziek)" on Dutch installations) in Home Assistant's own
+  media browser: a playlist opens to its tracks, each playable with its
+  original media id. A whole playlist is loaded from the Muziek page or the
+  action (HA's browser plays one item).
+- Diagnostics: number of playlists and items (no names).
+
+### Changed
+
+- Removing the integration also deletes the saved playlists.
+
+
 ## 0.2.0 — 2026-10-07
 
 Gert's wishes after 0.1.0 ("Dat ziet er al beter uit").
