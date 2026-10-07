@@ -27,6 +27,8 @@ async def async_get_config_entry_diagnostics(
                 "items": len(data["items"]),
                 "current": data["current"],
                 "next": data["next"],
+                "shuffle": data["shuffle"],
+                "repeat": data["repeat"],
                 "phase": data["phase"],
                 "fingerprint": controller.fingerprint,
             },

@@ -9,7 +9,7 @@ from pytest_homeassistant_custom_component.typing import ClientSessionGenerator
 
 from custom_components.media_queue.const import DOMAIN
 from custom_components.media_queue.controller import Phase
-from custom_components.media_queue.model import Mode
+from custom_components.media_queue.model import Mode, Repeat
 
 from .common import PLAYER, track
 
@@ -27,6 +27,7 @@ async def test_diagnostics(
     controller.queue.set_current(0)
     controller.phase = Phase.PLAYING
     controller.fingerprint = "http://ha/media/a.mp3?authSig=secret"
+    controller.set_repeat(Repeat.ALL)
     entry.runtime_data.controller("media_player.kitchen")
 
     diagnostics = await get_diagnostics_for_config_entry(hass, hass_client, entry)
@@ -37,6 +38,8 @@ async def test_diagnostics(
                 "items": 2,
                 "current": 0,
                 "next": 1,
+                "shuffle": False,
+                "repeat": "all",
                 "phase": "playing",
                 "fingerprint": "**REDACTED**",
             },
@@ -44,6 +47,8 @@ async def test_diagnostics(
                 "items": 0,
                 "current": None,
                 "next": None,
+                "shuffle": False,
+                "repeat": "off",
                 "phase": "idle",
                 "fingerprint": None,
             },
