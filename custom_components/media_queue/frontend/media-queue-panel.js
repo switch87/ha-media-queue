@@ -6,7 +6,7 @@ import { languageOf, translate } from "./lib/i18n.js";
 import { rememberPlayer, restorePlayer } from "./lib/player-memory.js";
 import { listPlayers, playersKey } from "./lib/players.js";
 import { limiter } from "./lib/limiter.js";
-import { applyUpdate, errorText, idsKey, newError, queueRows } from "./lib/queue-view.js";
+import { applyUpdate, errorText, idsKey, newError, queueRows, rowTitle } from "./lib/queue-view.js";
 import { dropIndex, rowAt } from "./lib/reorder.js";
 import {
   nowPlaying,
@@ -529,7 +529,7 @@ class MediaQueuePanel extends HTMLElement {
             "button",
             {
               class: "title link",
-              title: row.tooltip,
+              title: rowTitle(this.t("play"), row),
               "aria-label": `${this.t("play")}: ${row.label}`,
               onclick: () => this._call({ type: "media_queue/play_index", item_id: row.id }),
             },

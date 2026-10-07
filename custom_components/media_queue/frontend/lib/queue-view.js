@@ -9,6 +9,7 @@ export function queueRows(snapshot) {
     title: item.title,
     label: labelOf(item),
     tooltip: fileName(item.media_content_id) ?? labelOf(item),
+    file: fileName(item.media_content_id),
     thumbnail: item.thumbnail ?? null,
     mediaClass: item.media_class ?? null,
     current: index === snapshot.current,
@@ -76,4 +77,9 @@ export function fileName(contentId) {
 /** Return "title – artist" (or the title alone). */
 function labelOf(item) {
   return item.artist ? `${item.title} – ${item.artist}` : item.title;
+}
+
+/** Return the tooltip of a queue row: "Play: title – artist (file name)". */
+export function rowTitle(action, row) {
+  return row.file ? `${action}: ${row.label} (${row.file})` : `${action}: ${row.label}`;
 }

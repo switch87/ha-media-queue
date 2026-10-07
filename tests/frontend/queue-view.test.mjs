@@ -7,6 +7,7 @@ import {
   errorText,
   fileName,
   idsKey,
+  rowTitle,
   newError,
   queueRows,
 } from "../../custom_components/media_queue/frontend/lib/queue-view.js";
@@ -31,6 +32,7 @@ test("rows mark the current and the next item", () => {
     title: "A",
     label: "A",
     tooltip: "A",
+    file: null,
     thumbnail: "/a.jpg",
     mediaClass: "music",
     current: true,
@@ -142,4 +144,15 @@ test("a playback update keeps shuffle and repeat", () => {
   const merged = applyUpdate(base, { playback: true, current: 0, next: null, phase: "idle", last_error: null });
   assert.equal(merged.shuffle, true);
   assert.equal(merged.repeat, "one");
+});
+
+test("the row's tooltip names the action, the title and the file", () => {
+  const [tagged, radio] = queueRows({
+    items: [
+      { id: "1", title: "Song", artist: "Band", media_content_id: "media-source://media_source/local/A/01 Song.mp3" },
+      { id: "2", title: "Radio", media_content_id: "http://radio/stream" },
+    ],
+  });
+  assert.equal(rowTitle("Play", tagged), "Play: Song – Band (01 Song.mp3)");
+  assert.equal(rowTitle("Play", radio), "Play: Radio");
 });
