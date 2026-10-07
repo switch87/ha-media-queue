@@ -17,10 +17,11 @@ from .const import (
     PLAYBACK_SAVE_DELAY,
     SAVE_DELAY,
     STORAGE_KEY,
+    STORAGE_MINOR_VERSION,
     STORAGE_VERSION,
 )
 from .controller import Change, Phase, QueueController, snapshot
-from .model import Queue
+from .model import Queue, Repeat
 
 type Subscriber = Callable[[dict[str, Any]], None]
 type Closer = Callable[[], None]
@@ -32,13 +33,32 @@ def _is_player(entity_id: Any) -> bool:
     )
 
 
+class QueueStore(Store[dict[str, Any]]):
+    """The stored queues, migrated from older versions."""
+
+    async def _async_migrate_func(
+        self, old_major_version: int, old_minor_version: int, old_data: Any
+    ) -> dict[str, Any]:
+        """Add the 0.2.0 settings to queues stored by 0.1.0."""
+        queues = old_data.get("queues")
+        if old_minor_version < 2 and isinstance(queues, dict):
+            for raw in queues.values():
+                if isinstance(raw, dict):
+                    raw.setdefault("shuffle", False)
+                    raw.setdefault("repeat", Repeat.OFF.value)
+        data: dict[str, Any] = old_data
+        return data
+
+
 class QueueManager:
     """Keep one controller per media player and persist them."""
 
     def __init__(self, hass: HomeAssistant) -> None:
         """Create the manager; call async_load before use."""
         self.hass = hass
-        self._store: Store[dict[str, Any]] = Store(hass, STORAGE_VERSION, STORAGE_KEY)
+        self._store = QueueStore(
+            hass, STORAGE_VERSION, STORAGE_KEY, minor_version=STORAGE_MINOR_VERSION
+        )
         self._controllers: dict[str, QueueController] = {}
         self._subscribers: dict[str, list[tuple[Subscriber, Closer | None]]] = {}
         self._unloaded = False
@@ -144,7 +164,10 @@ class QueueManager:
             "queues": {
                 entity_id: controller.as_dict()
                 for entity_id, controller in self._controllers.items()
-                if controller.queue.items or controller.phase is not Phase.IDLE
+                if controller.queue.items
+                or controller.phase is not Phase.IDLE
+                or controller.queue.shuffle
+                or controller.queue.repeat is not Repeat.OFF
             }
         }
 

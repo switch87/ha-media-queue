@@ -15,7 +15,7 @@ from custom_components.media_queue.const import (
 )
 from custom_components.media_queue.controller import Change, Phase
 from custom_components.media_queue.manager import QueueManager
-from custom_components.media_queue.model import Mode, QueueItem
+from custom_components.media_queue.model import Mode, QueueItem, Repeat
 
 PLAYER = "media_player.living_room"
 
@@ -307,3 +307,75 @@ async def test_current_change_does_not_delay_a_queue_save(
     await hass.async_block_till_done()
     assert hass_storage[STORAGE_KEY]["data"]["queues"][PLAYER]["current"] == 0
     await manager.async_unload()
+
+
+async def test_data_of_0_1_0_is_migrated(
+    hass: HomeAssistant, hass_storage: dict[str, Any]
+) -> None:
+    """Version 1.1 queues get the shuffle and repeat defaults, stored as 1.2."""
+    hass_storage[STORAGE_KEY] = _stored(PLAYER, phase="playing", fingerprint="x")
+    hass_storage[STORAGE_KEY]["data"]["queues"]["media_player.bad"] = "x"
+    manager = QueueManager(hass)
+    await manager.async_load()
+
+    stored = hass_storage[STORAGE_KEY]
+    assert stored["version"] == 1
+    assert stored["minor_version"] == 2
+    queue = stored["data"]["queues"][PLAYER]
+    assert queue["shuffle"] is False
+    assert queue["repeat"] == "off"
+    assert queue["current"] == 1
+    assert stored["data"]["queues"]["media_player.bad"] == "x"
+    controller = manager.get(PLAYER)
+    assert controller is not None
+    assert controller.queue.shuffle is False
+    await manager.async_unload()
+
+
+async def test_migration_leaves_odd_data_alone(
+    hass: HomeAssistant, hass_storage: dict[str, Any]
+) -> None:
+    """Without a queues mapping there is nothing to migrate (and nothing loads)."""
+    hass_storage[STORAGE_KEY] = {
+        "version": 1,
+        "minor_version": 1,
+        "key": STORAGE_KEY,
+        "data": {"queues": ["x"]},
+    }
+    manager = QueueManager(hass)
+    await manager.async_load()
+    assert hass_storage[STORAGE_KEY]["data"] == {"queues": ["x"]}
+    assert hass_storage[STORAGE_KEY]["minor_version"] == 2
+    assert manager.entity_ids == []
+
+
+async def test_newer_minor_version_loads_as_it_is(
+    hass: HomeAssistant, hass_storage: dict[str, Any]
+) -> None:
+    """Data of a later 1.x (a downgrade) is read as far as it is understood."""
+    hass_storage[STORAGE_KEY] = _stored(PLAYER, shuffle=True, repeat="all")
+    hass_storage[STORAGE_KEY]["minor_version"] = 5
+    manager = QueueManager(hass)
+    await manager.async_load()
+    controller = manager.get(PLAYER)
+    assert controller is not None
+    assert controller.queue.shuffle is True
+    assert controller.queue.repeat.value == "all"
+    await manager.async_unload()
+
+
+async def test_settings_of_an_empty_queue_are_saved(
+    hass: HomeAssistant, hass_storage: dict[str, Any]
+) -> None:
+    """Shuffle or repeat on a player without items survive a restart."""
+    manager = QueueManager(hass)
+    await manager.async_load()
+    manager.controller(PLAYER).queue.set_shuffle(True)
+    manager.controller("media_player.kitchen").queue.repeat = Repeat.ONE
+    manager.controller("media_player.bedroom")
+    await manager.async_unload()
+
+    queues = hass_storage[STORAGE_KEY]["data"]["queues"]
+    assert set(queues) == {PLAYER, "media_player.kitchen"}
+    assert queues[PLAYER]["shuffle"] is True
+    assert queues["media_player.kitchen"]["repeat"] == "one"
