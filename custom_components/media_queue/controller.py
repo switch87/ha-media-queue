@@ -38,8 +38,9 @@ from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers.event import async_track_state_change_event
 from homeassistant.util import dt as dt_util
 
-from .const import DOMAIN
-from .model import Queue, QueueItem
+from .const import DOMAIN, QUEUE_LIMIT
+from .expand import AddRequest, async_expand
+from .model import Mode, Queue, QueueItem
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -157,15 +158,84 @@ class QueueController:
         """Tell the manager that the queue or phase changed."""
         self._on_change(self)
 
-    # --------------------------------------------------------------- playback
+    # --------------------------------------------------------------- commands
 
-    async def async_play(self, index: int, *, context: Context | None = None) -> None:
-        """Play the item at index now."""
+    async def async_add(
+        self, request: AddRequest, mode: Mode, *, context: Context | None = None
+    ) -> dict[str, Any]:
+        """Add what request points at; replace and play also start playing."""
+        room = (
+            QUEUE_LIMIT if mode is Mode.REPLACE else QUEUE_LIMIT - len(self.queue.items)
+        )
+        expansion = await async_expand(self.hass, self.entity_id, request, limit=room)
+        if not expansion.items:
+            if expansion.truncated:
+                raise ServiceValidationError(
+                    translation_domain=DOMAIN,
+                    translation_key="queue_full",
+                    translation_placeholders={"limit": str(QUEUE_LIMIT)},
+                )
+            raise ServiceValidationError(
+                translation_domain=DOMAIN,
+                translation_key="nothing_to_add",
+                translation_placeholders={
+                    "item": request.title or request.media_content_id
+                },
+            )
         async with self._lock:
+            result = self.queue.add(expansion.items, mode, limit=QUEUE_LIMIT)
+            if mode in (Mode.REPLACE, Mode.PLAY):
+                await self._play(result.start, context)
+            else:
+                self.async_changed()
+        return {
+            "added": result.added,
+            "truncated": expansion.truncated or result.truncated,
+            "limit": QUEUE_LIMIT,
+        }
+
+    async def async_next(self, *, context: Context | None = None) -> None:
+        """Play the next item."""
+        async with self._lock:
+            index = self.queue.next_position
+            if index >= len(self.queue.items):
+                raise ServiceValidationError(
+                    translation_domain=DOMAIN, translation_key="end_of_queue"
+                )
             await self._play(index, context)
 
-    async def _play(self, index: int, context: Context | None = None) -> None:
-        """Play the item at index; the caller holds the lock."""
+    async def async_previous(self, *, context: Context | None = None) -> None:
+        """Play the previous item (the first one again at the start)."""
+        async with self._lock:
+            index = self.queue.previous_position
+            if index is None:
+                raise ServiceValidationError(
+                    translation_domain=DOMAIN, translation_key="queue_empty"
+                )
+            await self._play(index, context)
+
+    @callback
+    def remove(self, index: int) -> None:
+        """Remove the item at index (the player keeps playing it if current)."""
+        self._check(index)
+        self.queue.remove(index)
+        self.async_changed()
+
+    @callback
+    def move(self, source: int, target: int) -> None:
+        """Move the item at source to target."""
+        self._check(source)
+        self._check(target)
+        self.queue.move(source, target)
+        self.async_changed()
+
+    @callback
+    def clear(self) -> None:
+        """Remove every item; a playing item plays on, then the queue stops."""
+        self.queue.clear()
+        self.async_changed()
+
+    def _check(self, index: int) -> None:
         if not 0 <= index < len(self.queue.items):
             raise ServiceValidationError(
                 translation_domain=DOMAIN,
@@ -175,6 +245,17 @@ class QueueController:
                     "count": str(len(self.queue.items)),
                 },
             )
+
+    # --------------------------------------------------------------- playback
+
+    async def async_play(self, index: int, *, context: Context | None = None) -> None:
+        """Play the item at index now."""
+        async with self._lock:
+            await self._play(index, context)
+
+    async def _play(self, index: int, context: Context | None = None) -> None:
+        """Play the item at index; the caller holds the lock."""
+        self._check(index)
         item = self.queue.items[index]
         self.queue.set_current(index)
         before = self.hass.states.get(self.entity_id)

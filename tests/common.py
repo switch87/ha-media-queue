@@ -31,7 +31,8 @@ async def async_setup_library(hass: HomeAssistant, tmp_path: Path) -> Path:
     album.mkdir()
     for title in ("a", "b", "c", "d", "e"):
         (album / f"{title}.mp3").write_bytes(b"")
-    (album / "clip.mp4").write_bytes(b"")
+    (tmp_path / "Clips").mkdir()
+    (tmp_path / "Clips" / "clip.mp4").write_bytes(b"")
     (album / "cover.jpg").write_bytes(b"")
     hass.config.media_dirs = {"local": str(tmp_path)}
     hass.config.internal_url = BASE_URL

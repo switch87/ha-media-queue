@@ -56,7 +56,7 @@ async def test_video_is_played_as_video(hass: HomeAssistant, tmp_path: Path) -> 
     controller.queue.add(
         [
             QueueItem(
-                media_content_id=f"{LOCAL}/Yeti/clip.mp4",
+                media_content_id=f"{LOCAL}/Clips/clip.mp4",
                 media_content_type="video/mp4",
                 title="Clip",
             )
