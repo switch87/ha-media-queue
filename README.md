@@ -1,202 +1,359 @@
 # Media queue for Home Assistant
 
-A play queue for every `media_player`, kept by Home Assistant itself, and a
-sidebar page **Muziek** to use it: the library on the left (everything Home
-Assistant's media browser offers for the chosen player: local media, NAS, radio,
-DLNA, …), the queue on the right, transport controls on top.
+[![HACS Custom](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://hacs.xyz/docs/faq/custom_repositories)
+[![Validate](https://github.com/switch87/ha-media-queue/actions/workflows/validate.yml/badge.svg)](https://github.com/switch87/ha-media-queue/actions/workflows/validate.yml)
+[![CI](https://github.com/switch87/ha-media-queue/actions/workflows/ci.yml/badge.svg)](https://github.com/switch87/ha-media-queue/actions/workflows/ci.yml)
 
-- **▶ Play** replaces the queue with the item and starts it, **⏭ Play next** puts
-  it after the current item, **➕ Add to queue** appends it. Works for single
-  tracks and for folders, albums and artists (expanded into their tracks,
-  depth-first in the source's order, at most 1000 items per queue).
-- The queue shows the current item; click an item to jump to it, ✕ to remove
-  it, drag the handle to reorder, clear it with the button in its header.
-- Players stay normal entities: pause and volume go to the player itself;
-  previous/next go through the queue.
-- **Shuffle** (🔀) and **repeat** (🔁 off → whole queue → current item) per
-  player, next to previous/next. They are kept by the queue, not by the
-  player: the player's own shuffle/repeat (MPD's random/repeat, Sonos's play
-  mode) is never touched. See "Shuffle and repeat" below.
-- **Titles from the tags**: items from the local media source (your music
-  folder or NAS mount) show "title – artist" from the files' ID3/Vorbis/MP4
-  tags instead of the file name (the file name is the tooltip). See "Titles
-  from the tags" below.
-- Queues, their shuffle/repeat settings and the tag titles survive a restart
-  (stored in `.storage/media_queue`).
-- **Playlists** (`.m3u`, `.m3u8`, `.pls` on the local media source): adding a
-  playlist queues its entries in order, with the `#EXTINF`/`TitleN` titles.
-  Entries are relative to the playlist's folder (absolute paths inside the
-  media folder work too; backslashes, UTF-8 with or without BOM and Latin-1
-  are understood); `http(s)` URLs become items; entries outside the media
-  folder and missing files are skipped. When a *folder* is added, playlist
-  files in it are skipped (their tracks are in the folder already).
-- The play/next/add buttons appear only for audio: not on the media-source
-  roots, nor on cameras, images, image uploads, text-to-speech, AI tasks,
-  pictures or videos (those can still be browsed).
-- English and Dutch; on a phone the library and the queue are tabs.
+A play queue for **every `media_player`**, kept by Home Assistant itself, and a
+**Music** page in the sidebar to use it: browse everything Home Assistant's
+media browser offers, put tracks, albums, folders and playlists in a visible
+queue, and let Home Assistant play them one after the other on the speaker of
+your choice.
 
-Screenshots: `docs/screenshots/`.
+![The Music page: library on the left, queue on the right, transport on top](docs/images/overview.png)
 
-## Install
+## Why
 
-Copy `custom_components/media_queue` to `/config/custom_components/`, restart
-Home Assistant, then *Settings → Devices & services → Add integration → Media
-queue*. Nothing to configure. The sidebar gets **Muziek** for every user.
+Home Assistant can browse your music (local files, a NAS, DLNA servers, radio,
+the players' own libraries) and play **one** item on a player. What it does
+not have is a queue: "play this album", "play this next", "add that folder",
+see what comes next, skip, reorder. Some players have a queue of their own,
+many don't, and each works differently.
 
-One Python package: **mutagen** (`>=1.47`, pure Python, ~200 kB). Home
-Assistant core itself ships it for its `tts` integration (1.48.1 in 2026.9),
-so it is usually installed already; otherwise Home Assistant installs it at the restart. The
-panel is a few small JavaScript modules served by the integration (no build
-step, nothing from the internet).
+Media queue adds that queue in Home Assistant, **per player, independent of
+what the player itself supports**. Your players stay the normal entities they
+are; the queue plays each item with the standard `media_player.play_media`
+and moves on when an item ends.
 
-Updating from 0.1.0: copy the new folder, restart. The stored queues are
-migrated (storage version 1.1 → 1.2: shuffle off, repeat off). Going back to
-0.1.0 keeps working; it ignores the new fields.
+## Features
+
+- **Library** with every source of Home Assistant's media browser for the
+  chosen player. Every audio item has **▶ Play** (replace the queue and play),
+  **⏭ Play next** (right after the current item) and **➕ Add** (to the end) —
+  also folders, albums and artists (expanded into their tracks) and `.m3u`,
+  `.m3u8` and `.pls` playlists of your local media.
+- A **visible queue**: the current item is highlighted; click an item to jump
+  to it, ✕ to remove it, drag the handle to move it, clear it with one button.
+- **Shuffle** and **repeat** (off / whole queue / current item) per player.
+- **Real titles**: tracks from your local media show "title – artist" from the
+  files' tags (ID3, Vorbis comments, MP4, …) instead of the file name.
+- **Saved playlists**: save a queue as a named playlist in one library shared
+  by all players, load it into any player's queue with Play, Play next or Add,
+  rename and delete them.
+- The saved playlists also appear in **Home Assistant's own media browser**
+  (Media → *Playlists (Media queue)*).
+- **Actions** for automations and scripts, and a websocket API.
+- English and Dutch; works on a phone (library and queue become tabs).
+- Light: no indexing, no polling, folders are read only when you open them.
+
+| Shuffle and repeat | Saved playlists |
+|---|---|
+| ![Shuffle on, repeat whole queue](docs/images/shuffle-repeat.png) | ![The playlist library](docs/images/playlists.png) |
+
+| Save a queue as a playlist | Playlists in HA's media browser | On a phone |
+|---|---|---|
+| ![Save as playlist](docs/images/save-playlist.png) | ![HA's media browser](docs/images/media-browser.png) | ![Phone](docs/images/phone-queue.png) |
+
+## Requirements
+
+- Home Assistant **2026.9** or newer (developed and tested on 2026.9.4).
+- One Python package, `mutagen` (≥ 1.47, pure Python). Home Assistant ships
+  it already for its `tts` integration; otherwise it is installed
+  automatically.
+- Any `media_player` that supports *play media*. To advance on its own, the
+  player must report when an item ends (see [How playing works](#how-playing-works)).
+
+## Installation
+
+### HACS (custom repository)
+
+1. HACS → ⋮ → *Custom repositories* → add
+   `https://github.com/switch87/ha-media-queue` with category *Integration*.
+2. Install **Media queue** and restart Home Assistant.
+3. Continue with [Configuration](#configuration).
+
+### Manual
+
+1. Copy `custom_components/media_queue` from the latest release into
+   `<config>/custom_components/`.
+2. Restart Home Assistant.
+
+## Configuration
+
+*Settings → Devices & services → Add integration → Media queue.* There is
+nothing to fill in; the integration can be added once. The sidebar gets a
+**Music** entry (*Muziek* on Dutch installations) for every user.
+
+## Usage
+
+1. Open **Music** and pick a player at the top right.
+2. Browse the library on the left. On any track, album, artist or folder:
+   - **▶ Play** replaces the queue with it and starts playing,
+   - **⏭ Play next** puts it right after the current item,
+   - **➕ Add** appends it.
+3. The queue on the right shows what plays and what comes next. Click an item
+   to play it, ✕ removes it, drag the ⠿ handle to move it.
+4. The transport bar has 🔀 shuffle, previous, play/pause, next, 🔁 repeat and
+   the player's volume. Previous and next go through the queue; pause and
+   volume go to the player itself.
+
+![Library with the play, play next and add buttons](docs/images/library.png)
+
+### Shuffle and repeat
+
+![Transport with shuffle and repeat](docs/images/transport.png)
+
+- The queue list always shows the **real play order**. Turning shuffle on
+  keeps the current item playing (it moves to the top) and shuffles all other
+  items after it; a note says "Shuffled: the queue is shown in play order."
+  Turning shuffle off restores the order in which the items were added; the
+  current item stays current.
+- While shuffled, *Add* mixes the new items into the part after the current
+  item, *Play next* puts them (shuffled) right after it.
+- **Repeat whole queue**: after the last item the queue starts again at the
+  top (shuffled anew when shuffle is on, never starting with the item that
+  just played). **Repeat current item**: the item plays again when it ends;
+  next and previous still move.
+- Both settings are per player and survive a restart. They are the queue's
+  own: the player's shuffle/repeat modes are never changed.
+
+### Saved playlists
+
+- **Save**: the 💾 button above the queue saves the player's queue, in the
+  order shown, under a name (1–100 characters, unique regardless of case). An
+  existing name asks before it is overwritten.
+- **Load**: the **Playlists** folder at the top of the library (for every
+  player) lists the saved playlists with ▶ ⏭ ➕, rename and delete. Open one to
+  see its tracks, each with ▶ ⏭ ➕ of its own.
+- Playlists keep what the queue knew: source, title, artist, album, duration,
+  picture — from any source (local files, DLNA, radio streams, …).
+- In Home Assistant's own media browser the playlists are under
+  *Playlists (Media queue)*. There a playlist opens to its tracks and each
+  track plays on its own (HA's browser plays one item at a time); a whole
+  playlist is loaded from the Music page or with `media_queue.load_playlist`.
+- Limits: 1000 items per playlist, 500 playlists.
+
+## Actions
+
+All actions are in the `media_queue` domain. Players are named by
+`entity_id`; queue items by `item_id` (from `get_queue`) or by position
+(`index`, 0 is the first).
+
+| Action | Fields | Does |
+|---|---|---|
+| `add` | `entity_id`, `media_content_id`, `media_content_type`, `mode` (`replace` / `add` / `next` / `play`), `title` | Adds a track, album, folder, artist or playlist file; `replace` and `play` start playing. Returns how many items were added. |
+| `play_index` | `entity_id`, `item_id` or `index` | Plays that item. |
+| `next`, `previous` | `entity_id` | Plays the next / previous item. |
+| `remove` | `entity_id`, `item_id` or `index` | Removes an item. |
+| `move` | `entity_id`, `item_id` or `from_index`, `to_index` | Moves an item. |
+| `clear` | `entity_id` | Empties the queue (what plays keeps playing). |
+| `set_shuffle` | `entity_id`, `shuffle` (true/false) | Shuffle on or off. |
+| `set_repeat` | `entity_id`, `repeat` (`off` / `all` / `one`) | Repeat mode. |
+| `get_queue` | `entity_id` | Returns the queue (response only). |
+| `save_playlist` | `entity_id`, `name`, `overwrite` | Saves the player's queue as a playlist. |
+| `load_playlist` | `entity_id`, `name`, `mode` | Puts a saved playlist in the player's queue. |
+| `rename_playlist` | `name`, `new_name` | Renames a playlist. |
+| `delete_playlist` | `name` | Deletes a playlist. |
+| `get_playlists` | — | Returns all playlists: id, name, count, duration (response only). |
+
+Playlist names in actions are matched regardless of case.
+
+### Examples
+
+Wake up with an album, shuffled:
+
+```yaml
+automation:
+  - alias: Morning music
+    triggers:
+      - trigger: time
+        at: "07:30:00"
+    actions:
+      - action: media_queue.set_shuffle
+        data:
+          entity_id: media_player.kitchen
+          shuffle: true
+      - action: media_queue.add
+        data:
+          entity_id: media_player.kitchen
+          media_content_id: "media-source://media_source/local/Music/Some Artist/Some Album"
+          media_content_type: music
+          mode: replace
+```
+
+Load a saved playlist and repeat it all evening:
+
+```yaml
+script:
+  evening_playlist:
+    sequence:
+      - action: media_queue.load_playlist
+        data:
+          entity_id: media_player.living_room
+          name: Late night
+          mode: replace
+      - action: media_queue.set_repeat
+        data:
+          entity_id: media_player.living_room
+          repeat: all
+```
+
+Read the queue in a template-friendly way:
+
+```yaml
+- action: media_queue.get_queue
+  data:
+    entity_id: media_player.living_room
+  response_variable: queue
+- action: persistent_notification.create
+  data:
+    message: "{{ queue['items'] | length }} items, playing {{ queue.current }}"
+```
+
+`media_content_id` values are the ids of Home Assistant's media browser; the
+easiest way to find one is to add the item from the Music page once and look
+at `get_queue`.
+
+## Websocket API
+
+Used by the Music page; available to other frontends. All commands are
+`media_queue/…`:
+
+- Queue: `get`, `subscribe`, `add`, `play_index`, `next`, `previous`,
+  `remove`, `move`, `clear`, `set_shuffle`, `set_repeat` (all with
+  `entity_id`; items by `item_id`, the index is a fallback).
+- Playlists: `playlists/list`, `playlists/get` (`playlist_id`),
+  `playlists/save` (`entity_id`, `name`, `overwrite`), `playlists/rename`
+  (`playlist_id`, `name`), `playlists/delete` (`playlist_id`),
+  `playlists/load` (`entity_id`, `playlist_id`, `mode`, optional `item_id` for
+  one track).
+
+A queue snapshot holds `items` (in play order, each with `id`, `title`,
+`artist`, `album`, `duration`, `thumbnail` when known), `current`, `next`
+(what the next button plays), `shuffle`, `repeat`, `phase` and `last_error`.
+`subscribe` sends a full snapshot when the items or settings change, a small
+`{"playback": true, …}` update when only the position changes, and
+`{"closed": true}` when the integration unloads.
+
+**Permissions**: reading a queue needs read access to the player; changing it
+needs control. Listing playlists is open to every user; saving and loading
+need control of the player; renaming and deleting need an administrator or a
+user who may control at least one media player.
 
 ## How playing works
 
-Each queue item is played with `media_player.play_media` on the real player.
-`media-source://` items are resolved first (like the players do themselves) and
-sent as a URL with content type `music` (or `video`/`image`); items from the
-player's own library are sent as they are.
+Each queue item is played with a plain `media_player.play_media` on the real
+player. Items from media sources (`media-source://…`) are resolved first and
+sent as a URL of your Home Assistant; items from a player's own library are
+sent as they are.
 
-The integration follows the player's state and plays the next item when the
-current one **ends by itself**: the player leaves `playing` for
-`idle`/`off`/`on`/`standby` (or pauses) within 5 s of the item's duration,
-estimated from the last reported position and its timestamp (or, without a
-position, from the time it played). Things that are *not* an end:
+The queue moves on when the current item **ends by itself**: the player
+leaves `playing` for `idle`/`off`/`on`/`standby` (or pauses) within 5 seconds
+of the item's duration. The duration comes from the player or, for local
+files, from the tags.
 
-- a stop or pause before the end (someone pressed stop in another app or card):
-  the queue waits; pressing play on the player continues following it;
-- items without a duration (radio, streams): they never end by themselves, on
-  purpose (Gert, 2026-10-07): a stop of the radio elsewhere must never start
-  the next item. Press next to go on;
-- the player playing something else (another media id): the queue stops
-  following it until you play from the queue again.
+Not an end, on purpose:
 
-Durations and positions reported as text (MPD) are understood; positions
-reported before the item was started are ignored.
+- **A stop or pause before the end** (someone pressed stop elsewhere): the
+  queue waits; pressing play on the player continues.
+- **Items without a duration** — radio and other streams never end by
+  themselves, so a stop of the radio never starts something else. Press next
+  to go on.
+- **The player plays something else** (another app or card started other
+  media): the queue stops following until you play from it again.
 
-Items that fail to play during advancing are skipped (at most 3 in a row), as
-are items the player accepts but does not start within 25 s (a URL it cannot
-fetch, a format it cannot play). The panel shows these errors.
+Items that fail to play are skipped (at most 3 in a row), as are items the
+player accepts but does not start within about 25 seconds (an unreachable
+URL, an unsupported format). The Music page shows these errors.
 
-## Shuffle and repeat
+### Player notes
 
-- The queue list always shows the **real play order**. Turning shuffle on
-  moves the current item to the top (it keeps playing, it stays current) and
-  shuffles every other item after it; the panel says "Shuffled: the queue is
-  shown in play order." Turning shuffle off puts the queue back in the order
-  it was added in (album order), with the current item still current.
-- Adding while shuffled: **Add to queue** mixes the new items at random
-  places after the current item; **Play next** puts them (shuffled among
-  themselves) right after the current item; **Play** replaces the queue with
-  the new items, shuffled. In the remembered album order they go where they
-  would have gone without shuffle.
-- Jump, remove and drag work as usual on the shown (play) order.
-- **Repeat whole queue**: after the last item (when it ends, or with the next
-  button) the queue starts again at the top; when shuffled it is shuffled anew
-  first, without starting with the item that just played.
-- **Repeat current item**: when the item ends it plays again. Next and
-  previous still move to another item (repeat stays on). An item that does not
-  start is not retried: the queue goes on with the next one.
-- Both settings are per player and survive a restart; they are also in the
-  actions and the websocket API (`set_shuffle`, `set_repeat`).
+- **MPD** (core `mpd` integration): every `play_media` clears MPD's own
+  playlist and plays the one item, so MPD's playlist only ever holds the
+  current item — the queue lives in Home Assistant. **Turn MPD's own repeat
+  mode off** (`mpc repeat off`): with repeat on, MPD replays the single item
+  forever and the queue never moves on. Use the queue's shuffle and repeat
+  instead.
+- **Sonos**: local files are played through a URL of your Home Assistant, so
+  the speaker must be able to reach Home Assistant's **internal URL**
+  (*Settings → System → Network*). Items from Sonos favorites or the Sonos
+  library replace Sonos's own queue each time (the page shows a note there);
+  the queue still steps through them one by one.
+- **Next/previous on the player's own controls** (a standard media card, the
+  player's app) act on the player's own queue, which holds only the current
+  item. Use the Music page or the `media_queue.next` / `media_queue.previous`
+  actions.
 
-## Titles from the tags
+## Performance
 
-For items of the local media source (`media-source://media_source/…`), the
-title, artist, album and duration are read from the file's tags with
-mutagen. Everything else (radio, DLNA, Sonos library, …) keeps the title the
-media browser gives it.
+Made to run on a Raspberry Pi with little memory:
 
-- **Add first, tags after**: an add is as fast as before; the items appear
-  with their file name (or the playlist's `#EXTINF` title), then a background
-  job reads the tags and the queue updates itself (in batches: at most 100
-  files or 2 s of reading per batch, one queue update per batch, at most 1000
-  files per add).
-- **Embedded covers are never read.** FLAC files: only the STREAMINFO and
-  VORBIS_COMMENT blocks are read, pictures and padding are skipped. MP3 files
-  with a large ID3 tag (over 128 kB, i.e. a big cover): only the title, artist
-  and album frames are read, the picture is skipped. Everything else (small
-  ID3 tags, M4A, Ogg, …) is read by mutagen, but never more than 256 kB per
-  file: an M4A or Ogg file whose tags are bigger (a large cover) keeps its
-  file name. Measured: ~16 kB read for a FLAC or MP3 with a 5 MB cover, ~25 kB
-  for an MP3 without one (8 kB reads), 0.1–0.5 ms per file on a local disk;
-  over a network mount (CIFS) expect a few milliseconds per file.
-- A tag title wins over `#EXTINF`, which wins over the file name. Files over
-  1 GiB are skipped; a batch that does not return within 30 s (a hung mount)
-  ends the reading for that add, the file names stay, and that player reads
-  no tags for 10 minutes (logged once).
-- The duration from the tags is also used to recognise the end of an item
-  when the player does not report a duration itself (radio and streams still
-  never end by themselves: they have no tags).
-- Items that were in the queue before 0.2.0, or whose reading was cut short
-  by a restart, keep their file name until they are added again (nothing is
-  re-read at start-up).
+- No index and no polling: folders are read only when you open or add them;
+  the queue follows the player through its state changes.
+- Adding a large folder is bounded: at most 1000 items per queue, 8 folder
+  levels and 200 folder reads per add.
+- Tags are read **after** an add, in the background and in small batches
+  (at most 100 files or 2 seconds per batch, one queue update per batch), so
+  adding is as fast as without tags. **Embedded cover art is never read**:
+  for FLAC only the stream info and the comments are read; for MP3 files with
+  a large tag only the title, artist and album frames; anything else reads at
+  most 256 kB per file. A batch that hangs for 30 seconds (a stuck network
+  share) stops tag reading for that player for 10 minutes.
+- The queues are written to disk a few seconds after a change; playback-only
+  changes much later, to spare SD cards.
 
-## What the players themselves do with each item
+## Troubleshooting
 
-The queue plays one item at a time with a plain `media_player.play_media`
-(no `enqueue`). What a player does with that call is up to its integration:
+- **The queue does not go to the next item**: does the player report a
+  duration (Developer tools → States → `media_duration`)? Streams never
+  advance. For MPD, turn MPD's repeat off. If the player stays `playing` after
+  the end of an item (some players loop), the queue cannot see the end.
+- **Sonos does not play local files**: check that Home Assistant's internal
+  URL is reachable from the speaker (not `localhost`, no HTTPS certificate the
+  speaker refuses).
+- **File names instead of titles**: only local media files are read; other
+  sources keep their browse titles. Items that were in a queue before
+  version 0.2.0 keep their file names until added again. Files with tags
+  larger than 256 kB in formats other than FLAC and MP3 (an M4A with a big
+  cover) keep their file name.
+- **The Music page does not appear**: reload the browser after the restart;
+  check that the integration is added under *Devices & services*.
+- **Diagnostics**: *Devices & services → Media queue → ⋮ → Download
+  diagnostics* (queue sizes, positions, settings and playlist counts; no
+  names, the player's media URL is redacted).
 
-- **MPD (core `mpd`)**: every `play_media` clears MPD's own playlist, adds the
-  one item and plays it. MPD's playlist therefore only ever holds the current
-  item; the queue lives in Home Assistant. MPD reports durations as text; that
-  is handled. **Turn MPD's repeat mode off**: with repeat on (and single off or
-  on), MPD replays the single item forever, never stops, and the queue never
-  moves on. Random/consume make no difference with one item. Use the queue's
-  own shuffle and repeat buttons instead; they never change MPD's modes.
-- **Sonos (core `sonos`)**: files and streams from the media sources are
-  played with Sonos's "play URI" path (Sonos's own queue is left alone).
-  Items from **Sonos favorites or the Sonos music library** (ids such as
-  `A:ALBUM/…`, `FV:…`) go through Sonos's queue-replacing path: each item
-  clears Sonos's queue and plays. The panel shows a note when you browse those
-  sections; the queue here still steps through them one by one.
-- Other players: whatever their `play_media` does for one item; the queue only
-  needs the player to report `playing` and, to advance, a duration.
+## FAQ
 
-## Actions (for automations and scripts)
+**Does this replace the players' own queues?** No. Players keep working as
+before; the queue in Home Assistant is used when you play from the Music page
+or the actions.
 
-`media_queue.add` (`entity_id`, `media_content_id`, `media_content_type`,
-`mode`: replace/add/next/play, `title`), `media_queue.play_index`,
-`media_queue.next`, `media_queue.previous`, `media_queue.remove`,
-`media_queue.move`, `media_queue.clear`, `media_queue.set_shuffle`
-(`shuffle`: true/false), `media_queue.set_repeat` (`repeat`: off/all/one), and
-`media_queue.get_queue` (returns the queue, with `shuffle` and `repeat`). `play_index`, `remove` and `move` take an `item_id` (from
-`get_queue`) or a position. Users who may not control a player cannot change
-its queue; players that do not exist are refused (only `add` creates a queue).
+**Can I use it without the Music page?** Yes — the actions work on their own,
+for example from automations or voice scripts.
 
-## Websocket API (used by the panel)
+**Video?** The queue is made for audio. Videos inside folders are only queued
+for players that are TVs; images are skipped.
 
-`media_queue/get`, `media_queue/subscribe`, `media_queue/add`,
-`media_queue/play_index`, `media_queue/remove`, `media_queue/move`,
-`media_queue/clear`, `media_queue/next`, `media_queue/previous`,
-`media_queue/set_shuffle` (`shuffle`), `media_queue/set_repeat` (`repeat`);
-all take `entity_id`; items are named by `item_id` (the index is a fallback).
-A snapshot holds `items` (in play order, each with `title`, `artist`,
-`album`, `duration` when known), `current`, `next` (what the next button
-plays; `null` at the end, also with repeat all + shuffle because the new order
-is drawn when it wraps), `shuffle`, `repeat`, `phase` and `last_error`. The
-subscription sends a full snapshot when the items or settings change and a small
-`{"playback": true, current, next, phase, last_error}` update when only
-playback changes; `{"closed": true}` when the integration unloads.
+**Where is my data?** In `.storage/media_queue` (queues) and
+`.storage/media_queue.playlists` (playlists) in your configuration folder.
 
-## Remove
+## Uninstall
 
-Delete the integration entry (this also deletes `.storage/media_queue`),
-remove `custom_components/media_queue`, restart.
+*Settings → Devices & services → Media queue → Delete.* This also deletes the
+stored queues **and the saved playlists**. Then remove the integration in HACS
+(or delete `custom_components/media_queue`) and restart.
 
-## Development
+## Contributing
 
-```bash
-python3.14 -m venv .venv && .venv/bin/pip install -r requirements_test.txt
-.venv/bin/python -m pytest -q          # 100 % line + branch coverage enforced
-.venv/bin/mypy custom_components/media_queue tests
-.venv/bin/ruff check . && .venv/bin/ruff format --check .
-npm test                               # node --test, 100 % for frontend/lib
-```
+Bug reports and pull requests are welcome at
+<https://github.com/switch87/ha-media-queue/issues>. See
+[CONTRIBUTING.md](CONTRIBUTING.md) for the development setup and the checks
+every change has to pass.
 
-`scripts/make_dev_library.py <folder>` writes a few tiny tagged MP3 albums
-into a dev media folder (for checking tag titles, shuffle and repeat on a
-local Home Assistant).
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md).
+
+## License
+
+[MIT](LICENSE) © 2026 Gert Pellin

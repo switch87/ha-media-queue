@@ -336,3 +336,28 @@ een lokale library van playlists die voor alle players beschikbaar is".
 30. Frontend logic (`lib/playlists.js`, strings).
 31. Panel: save dialog, playlists folder, rename/delete.
 32. Release docs 0.3.0; e2e with screenshots (nl).
+
+## e2e 0.3.0 (dev HA 2026.9.4, demo players)
+
+- Saved the Living Room queue (11 tagged items) from the panel as
+  "Zondagochtend"; saving "zondagochtend" again asked to overwrite (the name
+  is looked up in the list first, no error round trip).
+- On Bedroom (another player, empty queue): ➕ Add → 11 items, ⏭ Play next →
+  22 (inserted at the top: nothing was current), ▶ Play → replaced by the
+  11 items, the first one played on Bedroom; ➕ on one track of the opened
+  playlist → that track appended.
+- Rename to "Zondag" (dialog prefilled, focus back on the button), delete
+  with confirmation → "no saved playlists yet" note.
+- HA's own media browser: Media → "Playlists (Media queue)" lists the
+  playlists; one opens to its tracks with titles "title – artist".
+- Screenshots (nl): `docs/screenshots/playlist-*-nl.jpg`; English, for the
+  README: `docs/images/*.png`.
+
+## Community packaging (2026-10-07)
+
+Gert: follow the HACS standard, public repo github.com/switch87/ha-media-queue,
+MIT licence. Added LICENSE, `.github/workflows/validate.yml` (hacs/action with
+`ignore: brands` until a brand icon exists, hassfest) and `ci.yml` (pytest at
+100 %, mypy, ruff, node tests), tests for hassfest's manifest key order and
+service icons, a community README and CONTRIBUTING.md. The sidebar title now
+follows the installation's language ("Music", Dutch "Muziek").
