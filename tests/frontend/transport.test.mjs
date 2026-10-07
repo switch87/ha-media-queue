@@ -103,9 +103,9 @@ test("the shuffle button toggles and shows its state", () => {
 });
 
 test("the repeat button cycles off, all, one; its name carries the state", () => {
-  assert.deepEqual(repeatButton(undefined), { icon: "mdi:repeat-off", title: "repeat_off", value: "all" });
-  assert.deepEqual(repeatButton({ repeat: "all" }), { icon: "mdi:repeat", title: "repeat_all", value: "one" });
-  assert.deepEqual(repeatButton({ repeat: "one" }), { icon: "mdi:repeat-once", title: "repeat_one", value: "off" });
+  assert.deepEqual(repeatButton(undefined), { icon: "mdi:repeat-off", title: "repeat_off", value: "all", active: false });
+  assert.deepEqual(repeatButton({ repeat: "all" }), { icon: "mdi:repeat", title: "repeat_all", value: "one", active: true });
+  assert.deepEqual(repeatButton({ repeat: "one" }), { icon: "mdi:repeat-once", title: "repeat_one", value: "off", active: true });
   assert.equal(repeatButton({ repeat: "twice" }).value, "all");
 });
 

@@ -7,6 +7,7 @@ import { rememberPlayer, restorePlayer } from "./lib/player-memory.js";
 import { listPlayers, playersKey } from "./lib/players.js";
 import { limiter } from "./lib/limiter.js";
 import { applyUpdate, errorText, idsKey, newError, queueRows, rowTitle } from "./lib/queue-view.js";
+import { updateButton, updateRange, updateText } from "./lib/dom-update.js";
 import { dropIndex, rowAt } from "./lib/reorder.js";
 import {
   nowPlaying,
@@ -43,6 +44,7 @@ const STYLE = `
   .now .main { background: var(--primary-color); color: var(--text-primary-color, white); padding: 10px; }
   .now .mode { color: var(--secondary-text-color); }
   .now .mode.on { color: var(--primary-color); }
+  .now [hidden] { display: none !important; }
   .now input[type=range] { width: 120px; accent-color: var(--primary-color); }
   .narrow .now { flex-wrap: wrap; row-gap: 4px; }
   .narrow .now .info { flex: 1 1 calc(100% - 64px); }
@@ -245,6 +247,7 @@ class MediaQueuePanel extends HTMLElement {
       this._toast,
     );
     this.shadowRoot.replaceChildren(h("style", {}, STYLE), root);
+    this._buildTransport();
     this._showTab(this._tab);
     this._renderLibrary();
     this._renderQueue();
@@ -590,92 +593,107 @@ class MediaQueuePanel extends HTMLElement {
 
   // -------------------------------------------------------------- transport
 
+  _buildTransport() {
+    const button = (cls, onclick) => h("button", { class: cls, onclick }, icon("mdi:play"));
+    this._artFallback = h("span", { class: "art" }, icon("mdi:music"));
+    this._art = h("img", {
+      alt: "",
+      hidden: true,
+      onerror: () => {
+        this._art.hidden = true;
+        this._artFallback.hidden = false;
+      },
+    });
+    this._picture = undefined;
+    this._nowTitle = h("div", { class: "t" });
+    this._nowSubtitle = h("div", { class: "s" });
+    this._buttons = {
+      shuffle: button("mode", () =>
+        this._call({ type: "media_queue/set_shuffle", shuffle: shuffleButton(this._snapshot).value }),
+      ),
+      previous: button("", () => this._call({ type: "media_queue/previous" })),
+      main: button("main", () => this._playPause()),
+      next: button("", () => this._call({ type: "media_queue/next" })),
+      repeat: button("mode", () =>
+        this._call({ type: "media_queue/set_repeat", repeat: repeatButton(this._snapshot).value }),
+      ),
+    };
+    this._volume = h("input", {
+      type: "range",
+      min: 0,
+      max: 100,
+      hidden: true,
+      title: this.t("volume"),
+      "aria-label": this.t("volume"),
+      onchange: (e) => this._service("volume_set", { volume_level: Number(e.target.value) / 100 }),
+    });
+    this._now.replaceChildren(
+      this._art,
+      this._artFallback,
+      h("div", { class: "info" }, this._nowTitle, this._nowSubtitle),
+      ...Object.values(this._buttons),
+      this._volume,
+    );
+  }
+
   _renderTransport() {
     if (!this._now) return;
     const stateObj = this._stateObj;
     const info = nowPlaying(stateObj, this._snapshot);
     const action = playPauseAction(stateObj, this._snapshot);
     const buttons = queueButtons(this._snapshot);
-    const volume = volumeOf(stateObj);
     const shuffle = shuffleButton(this._snapshot);
     const repeat = repeatButton(this._snapshot);
-    const fallback = () => h("span", { class: "art" }, icon("mdi:music"));
-    const art = info.picture ? h("img", { alt: "", onerror: () => art.replaceWith(fallback()) }) : fallback();
-    if (info.picture) this._sign(info.picture).then((src) => (art.src = src));
-    this._now.replaceChildren(
-      art,
-      h(
-        "div",
-        { class: "info" },
-        h("div", { class: "t" }, info.title ?? this.t("nothing_playing")),
-        h("div", { class: "s" }, info.subtitle),
-      ),
-      h(
-        "button",
-        {
-          class: shuffle.pressed ? "mode on" : "mode",
-          title: this.t(shuffle.title),
-          "aria-label": this.t("shuffle"),
-          "aria-pressed": String(shuffle.pressed),
-          disabled: !this._entityId,
-          onclick: () => this._call({ type: "media_queue/set_shuffle", shuffle: shuffle.value }),
-        },
-        icon(shuffle.icon),
-      ),
-      h(
-        "button",
-        {
-          title: this.t("previous"),
-          "aria-label": this.t("previous"),
-          disabled: !buttons.previous,
-          onclick: () => this._call({ type: "media_queue/previous" }),
-        },
-        icon("mdi:skip-previous"),
-      ),
-      h(
-        "button",
-        {
-          class: "main",
-          title: this.t("play_pause"),
-          "aria-label": this.t("play_pause"),
-          disabled: !action,
-          onclick: () => this._playPause(),
-        },
-        icon(action?.icon ?? "mdi:play"),
-      ),
-      h(
-        "button",
-        {
-          title: this.t("next"),
-          "aria-label": this.t("next"),
-          disabled: !buttons.next,
-          onclick: () => this._call({ type: "media_queue/next" }),
-        },
-        icon("mdi:skip-next"),
-      ),
-      h(
-        "button",
-        {
-          class: repeat.value === "all" ? "mode" : "mode on",
-          title: this.t(repeat.title),
-          "aria-label": this.t(repeat.title),
-          disabled: !this._entityId,
-          onclick: () => this._call({ type: "media_queue/set_repeat", repeat: repeat.value }),
-        },
-        icon(repeat.icon),
-      ),
-      volume !== null &&
-        h("input", {
-          type: "range",
-          min: 0,
-          max: 100,
-          value: volume,
-          title: this.t("volume"),
-          "aria-label": this.t("volume"),
-          onchange: (e) =>
-            this._service("volume_set", { volume_level: Number(e.target.value) / 100 }),
-        }),
-    );
+    if (info.picture !== this._picture) {
+      const wanted = info.picture;
+      this._picture = wanted;
+      this._art.hidden = !wanted;
+      this._artFallback.hidden = Boolean(wanted);
+      if (wanted) {
+        this._sign(wanted).then((src) => {
+          if (this._picture === wanted) this._art.src = src;
+        });
+      } else {
+        this._art.removeAttribute("src");
+      }
+    }
+    updateText(this._nowTitle, info.title ?? this.t("nothing_playing"));
+    updateText(this._nowSubtitle, info.subtitle);
+    const noPlayer = !this._entityId;
+    updateButton(this._buttons.shuffle, {
+      icon: shuffle.icon,
+      title: this.t(shuffle.title),
+      label: this.t("shuffle"),
+      pressed: shuffle.pressed,
+      active: shuffle.pressed,
+      disabled: noPlayer,
+    });
+    updateButton(this._buttons.previous, {
+      icon: "mdi:skip-previous",
+      title: this.t("previous"),
+      label: this.t("previous"),
+      disabled: !buttons.previous,
+    });
+    updateButton(this._buttons.main, {
+      icon: action?.icon ?? "mdi:play",
+      title: this.t("play_pause"),
+      label: this.t("play_pause"),
+      disabled: !action,
+    });
+    updateButton(this._buttons.next, {
+      icon: "mdi:skip-next",
+      title: this.t("next"),
+      label: this.t("next"),
+      disabled: !buttons.next,
+    });
+    updateButton(this._buttons.repeat, {
+      icon: repeat.icon,
+      title: this.t(repeat.title),
+      label: this.t(repeat.title),
+      active: repeat.active,
+      disabled: noPlayer,
+    });
+    updateRange(this._volume, volumeOf(stateObj), this.shadowRoot.activeElement === this._volume);
   }
 
   _playPause() {

@@ -86,5 +86,6 @@ export function repeatButton(snapshot) {
     icon: REPEAT[mode].icon,
     title: `repeat_${mode}`,
     value: REPEAT[mode].next,
+    active: mode !== "off", // looks highlighted; not announced as "pressed"
   };
 }
