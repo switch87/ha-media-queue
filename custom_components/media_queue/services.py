@@ -46,7 +46,10 @@ async def _controller(
             raise Unauthorized(
                 context=call.context, entity_id=entity_id, permission=policy
             )
-    return async_get_manager(hass).controller(entity_id)
+    manager = async_get_manager(hass)
+    if call.service == "add":
+        return manager.controller(entity_id)
+    return manager.existing(entity_id)
 
 
 async def _add(controller: QueueController, call: ServiceCall) -> ServiceResponse:

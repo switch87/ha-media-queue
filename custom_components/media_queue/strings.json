@@ -36,6 +36,9 @@
     },
     "unknown_item": {
       "message": "The item {item_id} is no longer in the queue."
+    },
+    "unknown_player": {
+      "message": "The media player {entity_id} does not exist."
     }
   },
   "selector": {

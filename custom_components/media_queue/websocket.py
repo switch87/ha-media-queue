@@ -151,7 +151,7 @@ async def ws_play_index(
 ) -> None:
     """Jump to an item."""
     _allow(connection, msg["entity_id"], POLICY_CONTROL)
-    controller = async_get_manager(hass).controller(msg["entity_id"])
+    controller = async_get_manager(hass).existing(msg["entity_id"])
     await controller.async_play(
         _position(controller, msg), context=connection.context(msg)
     )
@@ -165,7 +165,7 @@ async def ws_next(
 ) -> None:
     """Play the next item."""
     _allow(connection, msg["entity_id"], POLICY_CONTROL)
-    controller = async_get_manager(hass).controller(msg["entity_id"])
+    controller = async_get_manager(hass).existing(msg["entity_id"])
     await controller.async_next(context=connection.context(msg))
     connection.send_result(msg["id"])
 
@@ -177,7 +177,7 @@ async def ws_previous(
 ) -> None:
     """Play the previous item."""
     _allow(connection, msg["entity_id"], POLICY_CONTROL)
-    controller = async_get_manager(hass).controller(msg["entity_id"])
+    controller = async_get_manager(hass).existing(msg["entity_id"])
     await controller.async_previous(context=connection.context(msg))
     connection.send_result(msg["id"])
 
@@ -187,7 +187,7 @@ async def ws_previous(
 def ws_remove(hass: HomeAssistant, connection: Connection, msg: dict[str, Any]) -> None:
     """Remove an item."""
     _allow(connection, msg["entity_id"], POLICY_CONTROL)
-    controller = async_get_manager(hass).controller(msg["entity_id"])
+    controller = async_get_manager(hass).existing(msg["entity_id"])
     controller.remove(_position(controller, msg))
     connection.send_result(msg["id"])
 
@@ -210,7 +210,7 @@ def ws_remove(hass: HomeAssistant, connection: Connection, msg: dict[str, Any]) 
 def ws_move(hass: HomeAssistant, connection: Connection, msg: dict[str, Any]) -> None:
     """Move an item."""
     _allow(connection, msg["entity_id"], POLICY_CONTROL)
-    controller = async_get_manager(hass).controller(msg["entity_id"])
+    controller = async_get_manager(hass).existing(msg["entity_id"])
     source = controller.resolve(msg.get("item_id"), msg.get("from_index"))
     controller.move(source, msg["to_index"])
     connection.send_result(msg["id"])
@@ -221,5 +221,5 @@ def ws_move(hass: HomeAssistant, connection: Connection, msg: dict[str, Any]) ->
 def ws_clear(hass: HomeAssistant, connection: Connection, msg: dict[str, Any]) -> None:
     """Remove every item."""
     _allow(connection, msg["entity_id"], POLICY_CONTROL)
-    async_get_manager(hass).controller(msg["entity_id"]).clear()
+    async_get_manager(hass).existing(msg["entity_id"]).clear()
     connection.send_result(msg["id"])

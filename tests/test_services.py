@@ -21,6 +21,7 @@ async def log(hass: HomeAssistant, tmp_path: Path) -> PlayerLog:
     entry.add_to_hass(hass)
     assert await hass.config_entries.async_setup(entry.entry_id)
     await hass.async_block_till_done()
+    hass.states.async_set(PLAYER, "idle")
     return PlayerLog(hass)
 
 
@@ -136,3 +137,12 @@ async def test_by_item_id(hass: HomeAssistant, log: PlayerLog) -> None:
     assert log.played == ["c.mp3"]
     with pytest.raises(vol.Invalid):
         await _call(hass, "remove")
+
+
+async def test_unknown_player(hass: HomeAssistant, log: PlayerLog) -> None:
+    """Actions on a player that does not exist are refused."""
+    with pytest.raises(ServiceValidationError) as err:
+        await hass.services.async_call(
+            DOMAIN, "clear", {"entity_id": "media_player.ghost"}, blocking=True
+        )
+    assert err.value.translation_key == "unknown_player"

@@ -36,6 +36,9 @@
     },
     "unknown_item": {
       "message": "Het item {item_id} staat niet meer in de wachtrij."
+    },
+    "unknown_player": {
+      "message": "De mediaspeler {entity_id} bestaat niet."
     }
   },
   "selector": {

@@ -153,8 +153,9 @@ async def test_subscribe(
     assert len(client.events) == 1  # no event after unsubscribing
 
 
-async def test_errors_are_translated(client: Client) -> None:
+async def test_errors_are_translated(hass: HomeAssistant, client: Client) -> None:
     """Command errors carry the translation key for the panel."""
+    hass.states.async_set(PLAYER, "idle")
     reply = await client.call("remove", entity_id=PLAYER, index=4)
     assert not reply["success"]
     assert reply["error"]["code"] == "home_assistant_error"
@@ -236,3 +237,23 @@ async def test_commands_by_item_id(client: Client, log: PlayerLog) -> None:
     assert reply["error"]["translation_key"] == "unknown_item"
     reply = await client.call("remove", entity_id=PLAYER)
     assert reply["error"]["code"] == "invalid_format"
+
+
+async def test_unknown_player_is_refused_without_creating_a_queue(
+    hass: HomeAssistant, client: Client, entry: MockConfigEntry
+) -> None:
+    """Commands other than add need a player that exists (or has a queue)."""
+    for command, data in (
+        ("clear", {}),
+        ("next", {}),
+        ("previous", {}),
+        ("remove", {"index": 0}),
+        ("move", {"from_index": 0, "to_index": 0}),
+        ("play_index", {"index": 0}),
+    ):
+        reply = await client.call(command, entity_id="media_player.ghost", **data)
+        assert reply["error"]["translation_key"] == "unknown_player", command
+    assert entry.runtime_data.entity_ids == []
+
+    hass.states.async_set("media_player.ghost", "idle")
+    assert (await client.call("clear", entity_id="media_player.ghost"))["success"]

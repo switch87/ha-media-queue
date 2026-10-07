@@ -89,6 +89,16 @@ class QueueManager:
         self._controllers[entity_id] = created
         return created
 
+    def existing(self, entity_id: str) -> QueueController:
+        """Return the controller of a player that exists or has a queue."""
+        if entity_id in self._controllers or self.hass.states.get(entity_id):
+            return self.controller(entity_id)
+        raise ServiceValidationError(
+            translation_domain=DOMAIN,
+            translation_key="unknown_player",
+            translation_placeholders={"entity_id": entity_id},
+        )
+
     def snapshot(self, entity_id: str) -> dict[str, Any]:
         """Return the panel state of entity_id's queue (empty if none)."""
         if (controller := self._controllers.get(entity_id)) is not None:
