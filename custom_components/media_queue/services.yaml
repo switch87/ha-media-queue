@@ -29,6 +29,33 @@ add:
       selector:
         text:
 
+add_url:
+  fields:
+    entity_id:
+      required: true
+      selector:
+        entity:
+          domain: media_player
+    url:
+      required: true
+      example: "https://radio.example/stream.m3u"
+      selector:
+        text:
+          type: url
+    mode:
+      default: add
+      selector:
+        select:
+          translation_key: mode
+          options:
+            - replace
+            - add
+            - next
+            - play
+    title:
+      selector:
+        text:
+
 play_index:
   fields:
     entity_id: &entity

@@ -121,6 +121,28 @@
         }
       }
     },
+    "add_url": {
+      "name": "Add stream URL",
+      "description": "Adds an internet radio or other http(s) stream to a player's queue; .m3u, .m3u8 and .pls playlists are expanded into their streams.",
+      "fields": {
+        "entity_id": {
+          "name": "Player",
+          "description": "The media player whose queue to change."
+        },
+        "url": {
+          "name": "URL",
+          "description": "An http:// or https:// address of a stream or a playlist."
+        },
+        "mode": {
+          "name": "Mode",
+          "description": "Where the items go and whether they play now."
+        },
+        "title": {
+          "name": "Title",
+          "description": "Name to show for the stream."
+        }
+      }
+    },
     "play_index": {
       "name": "Play queue item",
       "description": "Plays the item at a position in the queue (0 is the first).",

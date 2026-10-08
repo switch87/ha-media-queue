@@ -1,6 +1,7 @@
 {
   "services": {
     "add": { "service": "mdi:playlist-plus" },
+    "add_url": { "service": "mdi:radio" },
     "play_index": { "service": "mdi:play" },
     "next": { "service": "mdi:skip-next" },
     "previous": { "service": "mdi:skip-previous" },

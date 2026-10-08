@@ -121,6 +121,28 @@
         }
       }
     },
+    "add_url": {
+      "name": "Stream-URL toevoegen",
+      "description": "Voegt een internetradio of andere http(s)-stream toe aan de wachtrij van een speler; .m3u-, .m3u8- en .pls-afspeellijsten worden uitgepakt tot hun streams.",
+      "fields": {
+        "entity_id": {
+          "name": "Speler",
+          "description": "De mediaspeler waarvan de wachtrij verandert."
+        },
+        "url": {
+          "name": "URL",
+          "description": "Een http://- of https://-adres van een stream of een afspeellijst."
+        },
+        "mode": {
+          "name": "Modus",
+          "description": "Waar de items komen en of ze nu spelen."
+        },
+        "title": {
+          "name": "Titel",
+          "description": "Naam die voor de stream getoond wordt."
+        }
+      }
+    },
     "play_index": {
       "name": "Wachtrij-item afspelen",
       "description": "Speelt het item op een positie in de wachtrij (0 is het eerste).",

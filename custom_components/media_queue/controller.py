@@ -49,6 +49,7 @@ from .enrich import TagReader, with_tags
 from .expand import AddRequest, async_expand
 from .history import ListeningHistory, played_enough
 from .model import AddResult, Mode, Queue, QueueItem, Repeat
+from .stream import async_expand_url
 from .tags import Tags, local_file
 
 _LOGGER = logging.getLogger(__name__)
@@ -247,6 +248,32 @@ class QueueController:
         return {
             "added": added.added,
             "truncated": added.truncated,
+            "limit": QUEUE_LIMIT,
+        }
+
+    async def async_add_url(
+        self,
+        url: str,
+        mode: Mode,
+        title: str | None = None,
+        *,
+        context: Context | None = None,
+    ) -> dict[str, Any]:
+        """Add a stream URL (a .m3u/.pls one expanded) in the given mode."""
+        room = (
+            QUEUE_LIMIT if mode is Mode.REPLACE else QUEUE_LIMIT - len(self.queue.items)
+        )
+        if room <= 0:
+            raise ServiceValidationError(
+                translation_domain=DOMAIN,
+                translation_key="queue_full",
+                translation_placeholders={"limit": str(QUEUE_LIMIT)},
+            )
+        expansion = await async_expand_url(self.hass, url, title, limit=room)
+        result = await self._async_insert(expansion.items, mode, context, tagged=True)
+        return {
+            "added": result.added,
+            "truncated": expansion.truncated or result.truncated,
             "limit": QUEUE_LIMIT,
         }
 

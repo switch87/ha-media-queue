@@ -22,8 +22,10 @@ import voluptuous as vol
 from .controller import QueueController
 from .expand import AddRequest
 from .history import HISTORY_MAX
+from .library import PLAYLIST_ITEMS, clean_name
 from .manager import async_get_manager
 from .model import Mode, Repeat
+from .stream import MAX_URL, async_expand_url
 
 ENTITY: dict[str | vol.Marker, Any] = {
     vol.Required("entity_id"): cv.entity_domain(MEDIA_PLAYER_DOMAIN)
@@ -98,6 +100,8 @@ def async_register(hass: HomeAssistant) -> None:
         ws_playlists_load,
         ws_history_list,
         ws_history_reset,
+        ws_add_url,
+        ws_streams_save,
     ):
         async_register_command(hass, command)
 
@@ -430,3 +434,54 @@ def ws_history_reset(
     _allow_manage(hass, connection)
     async_get_manager(hass).history.reset()
     connection.send_result(msg["id"])
+
+
+# -------------------------------------------------------------------- streams
+
+URL = vol.All(cv.string, vol.Length(max=MAX_URL + 100))
+
+
+@websocket_command(
+    {
+        vol.Required("type"): "media_queue/add_url",
+        **ENTITY,
+        vol.Required("url"): URL,
+        vol.Optional("mode", default=Mode.ADD.value): vol.In([m.value for m in Mode]),
+        vol.Optional("title"): vol.Any(None, NAME),
+    }
+)
+@async_response
+async def ws_add_url(
+    hass: HomeAssistant, connection: Connection, msg: dict[str, Any]
+) -> None:
+    """Add a stream URL (internet radio, a .m3u/.pls playlist) in a mode."""
+    _allow(connection, msg["entity_id"], POLICY_CONTROL)
+    controller = async_get_manager(hass).controller(msg["entity_id"])
+    result = await controller.async_add_url(
+        msg["url"],
+        Mode(msg["mode"]),
+        msg.get("title"),
+        context=connection.context(msg),
+    )
+    connection.send_result(msg["id"], result)
+
+
+@websocket_command(
+    {
+        vol.Required("type"): "media_queue/streams/save",
+        vol.Required("url"): URL,
+        vol.Required("name"): NAME,
+        vol.Optional("overwrite", default=False): cv.boolean,
+    }
+)
+@async_response
+async def ws_streams_save(
+    hass: HomeAssistant, connection: Connection, msg: dict[str, Any]
+) -> None:
+    """Save a stream URL as a favourite: a playlist of its stream(s)."""
+    _allow_manage(hass, connection)
+    library = async_get_manager(hass).library
+    name = clean_name(msg["name"])
+    expansion = await async_expand_url(hass, msg["url"], name, limit=PLAYLIST_ITEMS)
+    playlist = library.save(name, expansion.items, overwrite=msg["overwrite"])
+    connection.send_result(msg["id"], playlist.summary())

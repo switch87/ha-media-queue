@@ -185,8 +185,20 @@ async def test_a_hung_mount_pauses_the_library_and_is_retried(
 ) -> None:
     """A batch that times out pauses the library; later the items are read."""
     _store(hass_storage, _item("a"))
-    with patch.object(enrich, "TAG_TIMEOUT", 0):
-        manager = await _loaded(hass)
+    released = threading.Event()
+
+    def hung(files: list[tuple[str, str, str]], budget: float) -> Any:
+        released.wait(5)  # a mount that does not answer
+        return len(files), {}
+
+    with (
+        patch.object(enrich, "read_batch", hung),
+        patch.object(enrich, "TAG_TIMEOUT", 0),  # the blocked batch cannot be done
+    ):
+        manager = QueueManager(hass)
+        await manager.async_load()
+    released.set()
+    await hass.async_block_till_done(wait_background_tasks=True)
     library = manager.library
     assert library.get("p1").items[0].artist is None
 

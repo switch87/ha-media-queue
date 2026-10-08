@@ -50,7 +50,7 @@ async def _controller(
                 context=call.context, entity_id=entity_id, permission=policy
             )
     manager = async_get_manager(hass)
-    if call.service in ("add", "load_playlist"):
+    if call.service in ("add", "add_url", "load_playlist"):
         return manager.controller(entity_id)
     return manager.existing(entity_id)
 
@@ -68,6 +68,15 @@ async def _add(controller: QueueController, call: ServiceCall) -> ServiceRespons
 
 def _position(controller: QueueController, call: ServiceCall, key: str) -> int:
     return controller.resolve(call.data.get("item_id"), call.data.get(key))
+
+
+async def _add_url(controller: QueueController, call: ServiceCall) -> ServiceResponse:
+    return await controller.async_add_url(
+        call.data["url"],
+        Mode(call.data["mode"]),
+        call.data.get("title"),
+        context=call.context,
+    )
 
 
 async def _play_index(controller: QueueController, call: ServiceCall) -> None:
@@ -150,6 +159,18 @@ _SERVICES: list[tuple[str, Handler, dict[str | vol.Marker, Any], SupportsRespons
                 [mode.value for mode in Mode]
             ),
             vol.Optional("title"): cv.string,
+        },
+        SupportsResponse.OPTIONAL,
+    ),
+    (
+        "add_url",
+        _add_url,
+        {
+            vol.Required("url"): vol.All(cv.string, vol.Length(max=2100)),
+            vol.Optional("mode", default=Mode.ADD.value): vol.In(
+                [mode.value for mode in Mode]
+            ),
+            vol.Optional("title"): NAME,
         },
         SupportsResponse.OPTIONAL,
     ),
