@@ -25,6 +25,9 @@
     "invalid_name": {
       "message": "A playlist name is 1 to {max} characters long."
     },
+    "invalid_url": {
+      "message": "Only http:// and https:// addresses can be played as a stream."
+    },
     "not_loaded": {
       "message": "The media queue integration is not loaded."
     },
@@ -51,6 +54,15 @@
     },
     "queue_full": {
       "message": "The queue is full ({limit} items)."
+    },
+    "stream_bad_content": {
+      "message": "\"{url}\" is no playlist (the server sends \"{content_type}\")."
+    },
+    "stream_empty": {
+      "message": "The playlist \"{url}\" contains no http(s) streams."
+    },
+    "stream_unreachable": {
+      "message": "Cannot load \"{url}\": the server did not answer in time or refused it."
     },
     "too_many_playlists": {
       "message": "The library holds at most {limit} playlists."

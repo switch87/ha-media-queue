@@ -25,6 +25,9 @@
     "invalid_name": {
       "message": "Een afspeellijstnaam is 1 tot {max} tekens lang."
     },
+    "invalid_url": {
+      "message": "Alleen http://- en https://-adressen kunnen als stream spelen."
+    },
     "not_loaded": {
       "message": "De integratie mediawachtrij is niet geladen."
     },
@@ -51,6 +54,15 @@
     },
     "queue_full": {
       "message": "De wachtrij is vol ({limit} items)."
+    },
+    "stream_bad_content": {
+      "message": "\"{url}\" is geen afspeellijst (de server stuurt \"{content_type}\")."
+    },
+    "stream_empty": {
+      "message": "De afspeellijst \"{url}\" bevat geen http(s)-streams."
+    },
+    "stream_unreachable": {
+      "message": "Kan \"{url}\" niet laden: de server antwoordde niet op tijd of weigerde."
     },
     "too_many_playlists": {
       "message": "De bibliotheek bevat hoogstens {limit} afspeellijsten."

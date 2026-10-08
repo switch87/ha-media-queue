@@ -41,7 +41,9 @@ def read_playlist(root: Path, relative: str) -> list[Entry]:
         text = raw.decode("utf-8-sig")
     except UnicodeDecodeError:
         text = raw.decode("latin-1")
-    pairs = _pls(text) if playlist.lower().endswith(".pls") else _m3u(text)
+    pairs = (
+        pls_entries(text) if playlist.lower().endswith(".pls") else m3u_entries(text)
+    )
     folder = os.path.dirname(playlist)
     entries: list[Entry] = []
     for target, title in pairs:
@@ -59,7 +61,8 @@ def _inside(path: str, root: str) -> bool:
     return os.path.commonpath([path, root]) == root and path != root
 
 
-def _m3u(text: str) -> list[tuple[str, str | None]]:
+def m3u_entries(text: str) -> list[tuple[str, str | None]]:
+    """Return (target, #EXTINF title) of every entry of an M3U playlist."""
     pairs: list[tuple[str, str | None]] = []
     title: str | None = None
     for raw_line in text.splitlines():
@@ -72,7 +75,8 @@ def _m3u(text: str) -> list[tuple[str, str | None]]:
     return pairs
 
 
-def _pls(text: str) -> list[tuple[str, str | None]]:
+def pls_entries(text: str) -> list[tuple[str, str | None]]:
+    """Return (target, title) of every entry of a PLS playlist, by number."""
     files: dict[int, str] = {}
     titles: dict[int, str] = {}
     for raw_line in text.splitlines():
