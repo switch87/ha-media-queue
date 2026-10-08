@@ -55,6 +55,11 @@ export const STRINGS = {
     deleted: "\u201c{name}\u201d deleted.",
     invalid_name: "A name is 1 to 100 characters long.",
     no_playlists: "No saved playlists yet. Save a queue with the button above the queue.",
+    stream_url: "Stream URL",
+    stream_placeholder: "https://\u2026 internet radio, .m3u or .pls",
+    save_favourite: "Save as favourite",
+    favourite_name: "Name of the favourite",
+    invalid_url: "Enter an http:// or https:// address.",
   },
   nl: {
     title: "Muziek",
@@ -110,6 +115,11 @@ export const STRINGS = {
     deleted: "\u201c{name}\u201d verwijderd.",
     invalid_name: "Een naam is 1 tot 100 tekens lang.",
     no_playlists: "Nog geen bewaarde afspeellijsten. Bewaar een wachtrij met de knop boven de wachtrij.",
+    stream_url: "Stream-URL",
+    stream_placeholder: "https://\u2026 internetradio, .m3u of .pls",
+    save_favourite: "Als favoriet bewaren",
+    favourite_name: "Naam van de favoriet",
+    invalid_url: "Geef een http://- of https://-adres.",
   },
 };
 

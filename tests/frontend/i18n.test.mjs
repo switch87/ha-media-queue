@@ -78,3 +78,11 @@ test("every error kind the queue reports has a label", () => {
     }
   }
 });
+
+test("the stream row and the favourite dialog have labels", () => {
+  for (const key of ["stream_url", "stream_placeholder", "save_favourite", "favourite_name", "invalid_url"]) {
+    for (const language of ["en", "nl"]) {
+      assert.ok(STRINGS[language][key], `${language}: ${key}`);
+    }
+  }
+});

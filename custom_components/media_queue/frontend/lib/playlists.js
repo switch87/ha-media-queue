@@ -26,6 +26,7 @@ export function playlistNodes(summaries) {
     media_content_id: `media-queue://playlist/${summary.id}`,
     title: summary.name,
     count: summary.count,
+    readonly: Boolean(summary.readonly),
     can_expand: true,
     can_play: false,
   }));
@@ -58,8 +59,8 @@ export function nodeActions(node) {
     play: playable,
     next: playable,
     add: playable,
-    rename: playlist,
-    remove: playlist,
+    rename: playlist && !node.readonly,
+    remove: playlist && !node.readonly,
   };
 }
 

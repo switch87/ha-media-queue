@@ -43,6 +43,7 @@ test("playlist and track nodes", () => {
     media_content_id: "media-queue://playlist/p1",
     title: "Mix",
     count: 3,
+    readonly: false,
     can_expand: true,
     can_play: false,
   });
@@ -125,4 +126,14 @@ test("a taken name is found in the list first (any case)", () => {
   assert.equal(findByName(list, "zondag").id, "p1");
   assert.equal(findByName(list, "Maandag"), null);
   assert.equal(findByName(undefined, "x"), null);
+});
+
+test("the automatic playlist cannot be renamed or deleted", () => {
+  const [node] = playlistNodes([{ id: "most_played", name: "Most played", count: 2, readonly: true }]);
+  assert.equal(node.readonly, true);
+  assert.deepEqual(nodeActions(node), {
+    open: true, play: true, next: true, add: true, rename: false, remove: false,
+  });
+  const [plain] = playlistNodes([{ id: "p", name: "Mix", count: 1 }]);
+  assert.equal(plain.readonly, false);
 });
