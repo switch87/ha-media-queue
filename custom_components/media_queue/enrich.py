@@ -7,6 +7,7 @@ TagReader, so a hung network mount pauses only the source that hit it.
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 from datetime import timedelta
 import logging
 from typing import Protocol
@@ -15,6 +16,7 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.util import dt as dt_util
 
 from .const import DOMAIN
+from .model import QueueItem
 from .tags import Tags, read_batch
 
 _LOGGER = logging.getLogger(__name__)
@@ -29,6 +31,17 @@ TAG_PAUSE = timedelta(minutes=10)
 
 # (item id, media folder, path relative to it)
 type TagFile = tuple[str, str, str]
+
+
+def with_tags(item: QueueItem, tags: Tags) -> QueueItem:
+    """Return item with what its tags say (the title only when there is one)."""
+    return dataclasses.replace(
+        item,
+        title=tags.title or item.title,
+        artist=tags.artist,
+        album=tags.album,
+        duration=tags.duration,
+    )
 
 
 class TagTarget(Protocol):
@@ -61,7 +74,7 @@ class TagReader:
         if not files or dt_util.utcnow() < self._paused_until:
             return
         task = self.hass.async_create_background_task(
-            self._read(files, target), f"{DOMAIN} tags {self.name}"
+            self.read(files, target), f"{DOMAIN} tags {self.name}"
         )
         self._tasks.add(task)
         task.add_done_callback(self._tasks.discard)
@@ -72,10 +85,15 @@ class TagReader:
         for task in self._tasks:
             task.cancel()
 
-    async def _read(self, files: list[TagFile], target: TagTarget) -> None:
-        """Read tags batch by batch; each batch updates the target once."""
+    async def read(self, files: list[TagFile], target: TagTarget) -> None:
+        """Read tags batch by batch; each batch updates the target once.
+
+        Nothing is read while the source is paused after a hung batch.
+        """
         async with self._lock:
             while True:
+                if dt_util.utcnow() < self._paused_until:
+                    return
                 # Items removed meanwhile (a clear, a replace) are not read.
                 present = target.tag_ids()
                 files = [file for file in files if file[0] in present]

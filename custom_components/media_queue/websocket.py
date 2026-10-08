@@ -382,7 +382,7 @@ async def ws_playlists_load(
     """Put a playlist (or one of its tracks) in a player's queue."""
     _allow(connection, msg["entity_id"], POLICY_CONTROL)
     manager = async_get_manager(hass)
-    items = manager.library.get(msg["playlist_id"]).pick(msg.get("item_id"))
+    items = manager.library.load(msg["playlist_id"], msg.get("item_id"))
     result = await manager.controller(msg["entity_id"]).async_add_items(
         items, Mode(msg["mode"]), context=connection.context(msg)
     )

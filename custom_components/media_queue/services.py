@@ -117,9 +117,10 @@ async def _save_playlist(
 async def _load_playlist(
     controller: QueueController, call: ServiceCall
 ) -> ServiceResponse:
-    playlist = async_get_manager(controller.hass).library.named(call.data["name"])
+    library = async_get_manager(controller.hass).library
+    items = library.load(library.named(call.data["name"]).playlist_id, None)
     return await controller.async_add_items(
-        playlist.items, Mode(call.data["mode"]), context=call.context
+        items, Mode(call.data["mode"]), context=call.context
     )
 
 

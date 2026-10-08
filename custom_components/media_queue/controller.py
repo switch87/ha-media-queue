@@ -45,7 +45,7 @@ from homeassistant.helpers.event import (
 from homeassistant.util import dt as dt_util
 
 from .const import DOMAIN, QUEUE_LIMIT
-from .enrich import TagReader
+from .enrich import TagReader, with_tags
 from .expand import AddRequest, async_expand
 from .model import AddResult, Mode, Queue, QueueItem, Repeat
 from .tags import Tags, local_file
@@ -697,17 +697,6 @@ class QueueController:
         fingerprint = data.get("fingerprint")
         controller.fingerprint = fingerprint if isinstance(fingerprint, str) else None
         return controller
-
-
-def with_tags(item: QueueItem, tags: Tags) -> QueueItem:
-    """Return item with what its tags say (the title only when there is one)."""
-    return dataclasses.replace(
-        item,
-        title=tags.title or item.title,
-        artist=tags.artist,
-        album=tags.album,
-        duration=tags.duration,
-    )
 
 
 def snapshot(

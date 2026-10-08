@@ -2,18 +2,21 @@
 
 from __future__ import annotations
 
+import asyncio
 import dataclasses
 from dataclasses import dataclass
 from typing import Any
 from uuid import uuid4
 
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
 
 from .const import DOMAIN, QUEUE_LIMIT, SAVE_DELAY
+from .enrich import TagFile, TagReader, with_tags
 from .model import QueueItem
+from .tags import Tags, local_file
 
 PLAYLIST_STORAGE_KEY = f"{DOMAIN}.playlists"
 PLAYLIST_STORAGE_VERSION = 1
@@ -118,10 +121,16 @@ class PlaylistLibrary:
 
     def __init__(self, hass: HomeAssistant) -> None:
         """Create the library; call async_load before use."""
+        self.hass = hass
         self._store: Store[dict[str, Any]] = Store(
             hass, PLAYLIST_STORAGE_VERSION, PLAYLIST_STORAGE_KEY
         )
         self._playlists: dict[str, Playlist] = {}
+        # Completing tags: one round at a time; items whose file was read.
+        self._tags = TagReader(hass, "playlists")
+        self._read_ids: set[str] = set()
+        self._repairing: asyncio.Task[None] | None = None
+        self._again = False
 
     @property
     def count(self) -> int:
@@ -148,9 +157,12 @@ class PlaylistLibrary:
                 continue
             self._playlists[playlist.playlist_id] = playlist
             names.add(playlist.name.casefold())
+        self.repair()
 
     async def async_unload(self) -> None:
-        """Write pending changes now."""
+        """Stop completing tags and write pending changes now."""
+        if self._repairing is not None:
+            self._repairing.cancel()
         await self._store.async_save(self._data())
 
     def summaries(self) -> list[dict[str, Any]]:
@@ -186,6 +198,7 @@ class PlaylistLibrary:
             existing.items = _copies(items)
             existing.updated = now
             self._changed()
+            self.repair()
             return existing
         if len(self._playlists) >= PLAYLISTS_MAX:
             raise _invalid("too_many_playlists", limit=str(PLAYLISTS_MAX))
@@ -198,6 +211,7 @@ class PlaylistLibrary:
         )
         self._playlists[playlist.playlist_id] = playlist
         self._changed()
+        self.repair()
         return playlist
 
     def rename(self, playlist_id: str, name: Any) -> None:
@@ -215,6 +229,72 @@ class PlaylistLibrary:
         """Remove a playlist."""
         self.get(playlist_id)
         del self._playlists[playlist_id]
+        self._changed()
+
+    def load(self, playlist_id: str, item_id: str | None) -> list[QueueItem]:
+        """Return the items to put in a queue; complete missing tags later."""
+        items = self.get(playlist_id).pick(item_id)
+        self.repair()
+        return items
+
+    # ------------------------------------------------------------------- tags
+
+    @callback
+    def repair(self) -> None:
+        """Read, in the background, the tags that playlist items lack.
+
+        Items without an artist or a duration whose media id is a local file
+        are read; a file that was read is not read again in this run (one
+        without tags is not read at every save), a missing one (a share
+        that is not mounted yet) is tried again at the next repair. One
+        round at a time; a repair asked meanwhile adds a round.
+        """
+        if self._repairing is not None and not self._repairing.done():
+            self._again = True
+            return
+        self._repairing = self.hass.async_create_background_task(
+            self._async_repair(), f"{DOMAIN} playlist tags"
+        )
+
+    async def _async_repair(self) -> None:
+        while True:
+            self._again = False
+            await self._tags.read(self._missing(), self)
+            if not self._again:
+                return
+
+    def _missing(self) -> list[TagFile]:
+        media_dirs = self.hass.config.media_dirs
+        return [
+            (item.item_id, *found)
+            for playlist in self._playlists.values()
+            for item in playlist.items
+            if (item.artist is None or item.duration is None)
+            and item.item_id not in self._read_ids
+            and (found := local_file(media_dirs, item.media_content_id)) is not None
+        ]
+
+    def tag_ids(self) -> set[str]:
+        """Return the ids of every playlist item (tag target)."""
+        return {
+            item.item_id
+            for playlist in self._playlists.values()
+            for item in playlist.items
+        }
+
+    def apply_tags(self, found: dict[str, Tags]) -> bool:
+        """Put the tags on the playlist items they belong to."""
+        self._read_ids.update(found)
+        changed = False
+        for playlist in self._playlists.values():
+            for position, item in enumerate(playlist.items):
+                if (tags := found.get(item.item_id)) is not None:
+                    playlist.items[position] = with_tags(item, tags)
+                    changed = True
+        return changed
+
+    def tags_changed(self) -> None:
+        """Store the completed playlists (delayed, tag target)."""
         self._changed()
 
     def _by_name(self, name: str) -> Playlist | None:
