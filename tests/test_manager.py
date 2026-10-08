@@ -6,6 +6,7 @@ from typing import Any
 from freezegun.api import FrozenDateTimeFactory
 from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
+import pytest
 from pytest_homeassistant_custom_component.common import async_fire_time_changed
 
 from custom_components.media_queue.const import (
@@ -398,4 +399,41 @@ async def test_migration_of_data_that_is_no_mapping(
     manager = QueueManager(hass)
     await manager.async_load()
     assert manager.entity_ids == []
+    await manager.async_unload()
+
+
+async def test_a_failing_subscriber_is_dropped(
+    hass: HomeAssistant, caplog: pytest.LogCaptureFixture
+) -> None:
+    """A subscriber that raises (a dead connection) does not break the queue."""
+    manager = QueueManager(hass)
+    await manager.async_load()
+    seen: list[dict[str, Any]] = []
+    calls: list[int] = []
+
+    def broken(data: dict[str, Any]) -> None:
+        calls.append(1)
+        raise RuntimeError("connection gone")
+
+    manager.subscribe(PLAYER, broken)
+    manager.subscribe(PLAYER, seen.append)
+    controller = manager.controller(PLAYER)
+    controller.queue.add([_item("a")], Mode.ADD, limit=10)
+
+    controller.async_changed()
+    controller.async_changed()
+
+    assert len(seen) == 2
+    assert calls == [1]  # dropped after its first failure
+    assert "connection gone" in caplog.text
+    await manager.async_unload()
+
+
+async def test_last_unsubscribe_forgets_the_player(hass: HomeAssistant) -> None:
+    """No empty subscriber lists pile up for players nobody watches."""
+    manager = QueueManager(hass)
+    await manager.async_load()
+    unsubscribe = manager.subscribe(PLAYER, lambda data: None)
+    unsubscribe()
+    assert PLAYER not in manager._subscribers
     await manager.async_unload()

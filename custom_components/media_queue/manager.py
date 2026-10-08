@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from datetime import timedelta
+import logging
 from typing import Any
 
 from homeassistant.const import Platform
@@ -23,6 +24,8 @@ from .const import (
 from .controller import Change, Phase, QueueController, snapshot
 from .library import PlaylistLibrary
 from .model import Queue, Repeat
+
+_LOGGER = logging.getLogger(__name__)
 
 type Subscriber = Callable[[dict[str, Any]], None]
 type Closer = Callable[[], None]
@@ -140,10 +143,16 @@ class QueueManager:
 
         @callback
         def unsubscribe() -> None:
-            if entry in subscribers:
-                subscribers.remove(entry)
+            self._drop(entity_id, entry)
 
         return unsubscribe
+
+    def _drop(self, entity_id: str, entry: tuple[Subscriber, Closer | None]) -> None:
+        subscribers = self._subscribers.get(entity_id, [])
+        if entry in subscribers:
+            subscribers.remove(entry)
+        if not subscribers:
+            self._subscribers.pop(entity_id, None)
 
     @callback
     def _changed(self, controller: QueueController, change: Change) -> None:
@@ -151,10 +160,15 @@ class QueueManager:
             return  # a late change (an advance being cancelled): not ours anymore
         full = change is Change.QUEUE
         data = controller.snapshot() if full else controller.playback()
-        for subscriber, _on_close in list(
-            self._subscribers.get(controller.entity_id, [])
-        ):
-            subscriber(data)
+        for entry in list(self._subscribers.get(controller.entity_id, [])):
+            try:
+                entry[0](data)
+            except Exception:
+                # A dead connection must not break the queue or the others.
+                _LOGGER.exception(
+                    "Dropping a subscriber of %s that failed", controller.entity_id
+                )
+                self._drop(controller.entity_id, entry)
         now = dt_util.utcnow()
         if full:
             self._store.async_delay_save(self._data, SAVE_DELAY)
