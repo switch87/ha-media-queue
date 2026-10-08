@@ -1,14 +1,20 @@
 """Tests for the config flow, setup, unload and the panel."""
 
+import asyncio
 from typing import Any
 
 from homeassistant.components.frontend import DATA_PANELS
 from homeassistant.config_entries import SOURCE_USER, ConfigEntryState
-from homeassistant.core import HomeAssistant
+from homeassistant.core import DOMAIN as HOMEASSISTANT_DOMAIN, HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
+from homeassistant.helpers import issue_registry as ir
 from homeassistant.setup import async_setup_component
+import pytest
 from pytest_homeassistant_custom_component.common import MockConfigEntry
-from pytest_homeassistant_custom_component.typing import ClientSessionGenerator
+from pytest_homeassistant_custom_component.typing import (
+    ClientSessionGenerator,
+    WebSocketGenerator,
+)
 
 from custom_components.media_queue.const import DOMAIN, STORAGE_KEY
 from custom_components.media_queue.library import PLAYLIST_STORAGE_KEY
@@ -122,3 +128,28 @@ async def test_removing_the_entry_deletes_the_queues(
     await hass.async_block_till_done()
     assert STORAGE_KEY not in hass_storage
     assert PLAYLIST_STORAGE_KEY not in hass_storage
+
+
+async def test_a_yaml_line_is_ignored_with_a_clear_message(
+    hass: HomeAssistant,
+    hass_ws_client: WebSocketGenerator,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """`media_queue:` in configuration.yaml (the Pi tried it) changes nothing.
+
+    Home Assistant logs that YAML is not supported and raises a repair issue;
+    the integration still runs once, from its config entry.
+    """
+    assert await async_setup_component(hass, DOMAIN, {DOMAIN: {}})
+    entry = await _setup(hass)
+    assert entry.state is ConfigEntryState.LOADED
+    assert "does not support YAML setup" in caplog.text
+    issues = ir.async_get(hass)
+    assert issues.async_get_issue(HOMEASSISTANT_DOMAIN, f"config_entry_only_{DOMAIN}")
+    assert len(hass.config_entries.async_entries(DOMAIN)) == 1
+
+    client = await hass_ws_client(hass)
+    await client.send_json_auto_id({"type": "media_queue/get", "entity_id": PLAYER})
+    async with asyncio.timeout(5):
+        reply = await client.receive_json()
+    assert reply["success"]
