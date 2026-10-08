@@ -8,7 +8,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ServiceValidationError
 import pytest
 
-from custom_components.media_queue import controller as controller_module
+from custom_components.media_queue import controller as controller_module, enrich
 from custom_components.media_queue.const import QUEUE_LIMIT
 from custom_components.media_queue.library import PLAYLIST_STORAGE_KEY
 from custom_components.media_queue.model import Mode, QueueItem
@@ -106,7 +106,7 @@ async def test_only_items_without_duration_are_read_again(
         title="A",
         duration=3.0,
     )
-    with patch.object(controller_module, "read_batch", spy):
+    with patch.object(enrich, "read_batch", spy):
         await controller.async_add_items([tagged, track("b")], Mode.ADD)
         await hass.async_block_till_done(wait_background_tasks=True)
     assert asked == ["Yeti/b.mp3"]

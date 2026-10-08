@@ -14,7 +14,7 @@ from homeassistant.setup import async_setup_component
 from homeassistant.util import dt as dt_util
 import pytest
 
-from custom_components.media_queue import controller as controller_module, tags
+from custom_components.media_queue import controller as controller_module, enrich, tags
 from custom_components.media_queue.controller import Phase
 from custom_components.media_queue.expand import AddRequest
 from custom_components.media_queue.model import Mode, QueueItem
@@ -385,7 +385,7 @@ async def test_enrichment_in_batches_and_capped(
     manager.subscribe(PLAYER, seen.append)
     controller = manager.controller(PLAYER)
     with (
-        patch.object(controller_module, "TAG_BATCH", 1),
+        patch.object(enrich, "TAG_BATCH", 1),
         patch.object(controller_module, "TAG_LIMIT", 2),
     ):
         await controller.async_add(ALBUM, Mode.ADD)
@@ -417,7 +417,7 @@ async def test_items_removed_meanwhile_and_other_sources(
         title="Radio",
         can_expand=False,
     )
-    with patch.object(controller_module, "read_batch") as reader:
+    with patch.object(enrich, "read_batch") as reader:
         await controller.async_add(radio, Mode.ADD)
         await hass.async_block_till_done(wait_background_tasks=True)
     reader.assert_not_called()
@@ -430,7 +430,7 @@ async def test_a_hanging_folder_ends_the_enrichment(
     """A batch that takes too long (a hung mount) leaves the file names."""
     manager = await async_manager_with(hass)
     controller = manager.controller(PLAYER)
-    with patch.object(controller_module, "TAG_TIMEOUT", 0):
+    with patch.object(enrich, "TAG_TIMEOUT", 0):
         await controller.async_add(ALBUM, Mode.ADD)
         await hass.async_block_till_done(wait_background_tasks=True)
     assert controller.queue.items[0].title == "01 Soap Shop Rock.mp3"
@@ -490,8 +490,8 @@ async def test_items_gone_before_reading_are_not_read(
         return tags.read_batch(files, budget)
 
     with (
-        patch.object(controller_module, "read_batch", spy),
-        patch.object(controller_module, "TAG_BATCH", 2),
+        patch.object(enrich, "read_batch", spy),
+        patch.object(enrich, "TAG_BATCH", 2),
     ):
         await controller.async_add(ALBUM, Mode.ADD)  # the first batch starts
         controller.remove(2)  # in the second batch
@@ -516,11 +516,11 @@ async def test_a_timeout_pauses_tags_for_that_player(
     """After a hung batch the player reads no tags for 10 minutes (logged once)."""
     manager = await async_manager_with(hass)
     controller = manager.controller(PLAYER)
-    with patch.object(controller_module, "TAG_TIMEOUT", 0):
+    with patch.object(enrich, "TAG_TIMEOUT", 0):
         await controller.async_add(ALBUM, Mode.ADD)
         await hass.async_block_till_done(wait_background_tasks=True)
 
-    with patch.object(controller_module, "read_batch") as reader:
+    with patch.object(enrich, "read_batch") as reader:
         freezer.tick(timedelta(minutes=9))
         await controller.async_add(ALBUM, Mode.ADD)
         await hass.async_block_till_done(wait_background_tasks=True)

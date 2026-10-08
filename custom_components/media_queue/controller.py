@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Callable
 import dataclasses
-from datetime import datetime, timedelta
+from datetime import datetime
 from enum import StrEnum
 import logging
 import math
@@ -45,9 +45,10 @@ from homeassistant.helpers.event import (
 from homeassistant.util import dt as dt_util
 
 from .const import DOMAIN, QUEUE_LIMIT
+from .enrich import TagReader
 from .expand import AddRequest, async_expand
 from .model import AddResult, Mode, Queue, QueueItem, Repeat
-from .tags import Tags, local_file, read_batch
+from .tags import Tags, local_file
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -59,14 +60,8 @@ END_TOLERANCE = 5.0
 RESTART_WINDOW = 15.0
 # Items that fail in a row before automatic advancing gives up.
 MAX_SKIPS = 3
-# Tags: items read per add, files per batch, seconds of reading per batch
-# (smaller batches on a slow mount), seconds before a batch counts as hung.
+# Tags: items read per add (batches and timeouts: enrich.py).
 TAG_LIMIT = 1000
-TAG_BATCH = 100
-TAG_BUDGET = 2.0
-TAG_TIMEOUT = 30
-# After a batch timed out (a hung mount), no tags for this player for a while.
-TAG_PAUSE = timedelta(minutes=10)
 # Seconds a player may take to start an item before it counts as failed.
 STARTING_TIMEOUT = 25
 # Seconds a play_media call may take: the queue lock is held meanwhile, so a
@@ -160,8 +155,7 @@ class QueueController:
         self._on_change = on_change
         self._lock = asyncio.Lock()
         # One tag reading at a time per player.
-        self._tag_lock = asyncio.Lock()
-        self._tags_paused_until = dt_util.utcnow()
+        self._tags = TagReader(hass, entity_id)
         self._unsubscribe: CALLBACK_TYPE = _nothing
         self._tasks: set[asyncio.Task[None]] = set()
         self._watchdog: CALLBACK_TYPE = _nothing
@@ -192,6 +186,7 @@ class QueueController:
         self._unsubscribe()
         self._unsubscribe = _nothing
         self._cancel_watchdog()
+        self._tags.cancel()
         for task in self._tasks:
             task.cancel()
 
@@ -325,44 +320,13 @@ class QueueController:
             for item in items[:TAG_LIMIT]
             if (found := local_file(media_dirs, item.media_content_id)) is not None
         ]
-        if not files or dt_util.utcnow() < self._tags_paused_until:
-            return
-        task = self.hass.async_create_background_task(
-            self._async_enrich(files), f"{DOMAIN} tags {self.entity_id}"
-        )
-        self._tasks.add(task)
-        task.add_done_callback(self._tasks.discard)
+        self._tags.start(files, self)
 
-    async def _async_enrich(self, files: list[tuple[str, str, str]]) -> None:
-        """Read tags batch by batch; each batch updates the queue once."""
-        async with self._tag_lock:
-            while True:
-                # Items removed meanwhile (a clear, a replace) are not read.
-                present = {item.item_id for item in self.queue.items}
-                files = [file for file in files if file[0] in present]
-                if not files:
-                    return
-                try:
-                    count, found = await asyncio.wait_for(
-                        self.hass.async_add_executor_job(
-                            read_batch, files[:TAG_BATCH], TAG_BUDGET
-                        ),
-                        TAG_TIMEOUT,
-                    )
-                except TimeoutError:
-                    _LOGGER.warning(
-                        "%s: reading tags takes too long; keeping file names "
-                        "and reading no tags for this player for %s",
-                        self.entity_id,
-                        TAG_PAUSE,
-                    )
-                    self._tags_paused_until = dt_util.utcnow() + TAG_PAUSE
-                    return
-                files = files[count:]
-                if self._apply_tags(found):
-                    self.async_changed()
+    def tag_ids(self) -> set[str]:
+        """Return the ids of the items in the queue (tag target)."""
+        return {item.item_id for item in self.queue.items}
 
-    def _apply_tags(self, found: dict[str, Tags]) -> bool:
+    def apply_tags(self, found: dict[str, Tags]) -> bool:
         """Put the tags on the items still in the queue; return if any were."""
         positions = {item.item_id: n for n, item in enumerate(self.queue.items)}
         changed = False
@@ -370,15 +334,13 @@ class QueueController:
             if (position := positions.get(item_id)) is None:
                 continue  # removed meanwhile
             item = self.queue.items[position]
-            self.queue.items[position] = dataclasses.replace(
-                item,
-                title=tags.title or item.title,
-                artist=tags.artist,
-                album=tags.album,
-                duration=tags.duration,
-            )
+            self.queue.items[position] = with_tags(item, tags)
             changed = True
         return changed
+
+    def tags_changed(self) -> None:
+        """Send the queue with its new tags and store it (tag target)."""
+        self.async_changed()
 
     @callback
     def set_shuffle(self, on: bool) -> None:
@@ -735,6 +697,17 @@ class QueueController:
         fingerprint = data.get("fingerprint")
         controller.fingerprint = fingerprint if isinstance(fingerprint, str) else None
         return controller
+
+
+def with_tags(item: QueueItem, tags: Tags) -> QueueItem:
+    """Return item with what its tags say (the title only when there is one)."""
+    return dataclasses.replace(
+        item,
+        title=tags.title or item.title,
+        artist=tags.artist,
+        album=tags.album,
+        duration=tags.duration,
+    )
 
 
 def snapshot(
