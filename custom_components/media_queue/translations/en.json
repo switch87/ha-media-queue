@@ -40,6 +40,9 @@
     "playlist_exists": {
       "message": "A playlist called \"{name}\" already exists."
     },
+    "playlist_readonly": {
+      "message": "\"{name}\" is made automatically and cannot be changed, renamed or deleted."
+    },
     "playlist_too_long": {
       "message": "A playlist holds at most {limit} items."
     },

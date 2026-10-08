@@ -15,6 +15,7 @@ from homeassistant.util import dt as dt_util
 
 from .const import DOMAIN, QUEUE_LIMIT, SAVE_DELAY
 from .enrich import TagFile, TagReader, with_tags
+from .history import ListeningHistory
 from .model import QueueItem
 from .tags import Tags, local_file
 
@@ -24,6 +25,11 @@ NAME_MAX = 100
 # Items per playlist (a queue holds no more) and playlists in the library.
 PLAYLIST_ITEMS = QUEUE_LIMIT
 PLAYLISTS_MAX = 500
+# The automatic playlist of the most played tracks: its id, size and name.
+MOST_PLAYED_ID = "most_played"
+MOST_PLAYED_MAX = 100
+MOST_PLAYED_NAMES = {"nl": "Meest beluisterd"}
+MOST_PLAYED_NAME = "Most played"
 
 
 def _invalid(key: str, **placeholders: str) -> ServiceValidationError:
@@ -56,6 +62,7 @@ class Playlist:
     items: list[QueueItem]
     created: str
     updated: str
+    readonly: bool = False
 
     def pick(self, item_id: str | None) -> list[QueueItem]:
         """Return every item, or only the one with item_id."""
@@ -76,6 +83,7 @@ class Playlist:
             "duration": float(sum(durations)) if durations else None,
             "created": self.created,
             "updated": self.updated,
+            "readonly": self.readonly,
         }
 
     def as_dict(self) -> dict[str, Any]:
@@ -119,9 +127,10 @@ class Playlist:
 class PlaylistLibrary:
     """All saved playlists of the installation and their storage."""
 
-    def __init__(self, hass: HomeAssistant) -> None:
+    def __init__(self, hass: HomeAssistant, history: ListeningHistory) -> None:
         """Create the library; call async_load before use."""
         self.hass = hass
+        self.history = history
         self._store: Store[dict[str, Any]] = Store(
             hass, PLAYLIST_STORAGE_VERSION, PLAYLIST_STORAGE_KEY
         )
@@ -166,14 +175,40 @@ class PlaylistLibrary:
         await self._store.async_save(self._data())
 
     def summaries(self) -> list[dict[str, Any]]:
-        """Return every playlist's summary, by name."""
+        """Return every playlist's summary: "Most played" first, then by name."""
         ordered = sorted(self._playlists.values(), key=lambda p: p.name.casefold())
-        return [playlist.summary() for playlist in ordered]
+        most = self._most_played()
+        return [playlist.summary() for playlist in [*most, *ordered]]
 
     def get(self, playlist_id: str) -> Playlist:
         """Return the playlist with playlist_id."""
+        if playlist_id == MOST_PLAYED_ID and (most := self._most_played()):
+            return most[0]
         if (playlist := self._playlists.get(playlist_id)) is None:
             raise _invalid("unknown_playlist", playlist=playlist_id)
+        return playlist
+
+    def _most_played(self) -> list[Playlist]:
+        """Return the automatic playlist (none while nothing was played)."""
+        plays = self.history.top(MOST_PLAYED_MAX)
+        if not plays:
+            return []
+        language = self.hass.config.language.split("-")[0]
+        moments = [play.last_played for play in plays]
+        return [
+            Playlist(
+                playlist_id=MOST_PLAYED_ID,
+                name=MOST_PLAYED_NAMES.get(language, MOST_PLAYED_NAME),
+                items=[play.as_item() for play in plays],
+                created=min(moments),
+                updated=max(moments),
+                readonly=True,
+            )
+        ]
+
+    def _writable(self, playlist: Playlist) -> Playlist:
+        if playlist.readonly:
+            raise _invalid("playlist_readonly", name=playlist.name)
         return playlist
 
     def named(self, name: str) -> Playlist:
@@ -192,6 +227,7 @@ class PlaylistLibrary:
         now = dt_util.utcnow().isoformat()
         existing = self._by_name(name)
         if existing is not None:
+            self._writable(existing)
             if not overwrite:
                 raise _invalid("playlist_exists", name=existing.name)
             existing.name = name
@@ -216,7 +252,7 @@ class PlaylistLibrary:
 
     def rename(self, playlist_id: str, name: Any) -> None:
         """Give a playlist another name (not one of another playlist)."""
-        playlist = self.get(playlist_id)
+        playlist = self._writable(self.get(playlist_id))
         name = clean_name(name)
         other = self._by_name(name)
         if other is not None and other is not playlist:
@@ -227,7 +263,7 @@ class PlaylistLibrary:
 
     def delete(self, playlist_id: str) -> None:
         """Remove a playlist."""
-        self.get(playlist_id)
+        self._writable(self.get(playlist_id))
         del self._playlists[playlist_id]
         self._changed()
 
@@ -299,7 +335,7 @@ class PlaylistLibrary:
 
     def _by_name(self, name: str) -> Playlist | None:
         folded = name.casefold()
-        for playlist in self._playlists.values():
+        for playlist in [*self._most_played(), *self._playlists.values()]:
             if playlist.name.casefold() == folded:
                 return playlist
         return None

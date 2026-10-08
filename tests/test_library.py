@@ -13,6 +13,7 @@ from pytest_homeassistant_custom_component.common import async_fire_time_changed
 
 from custom_components.media_queue import library as library_module
 from custom_components.media_queue.const import SAVE_DELAY
+from custom_components.media_queue.history import ListeningHistory
 from custom_components.media_queue.library import (
     PLAYLIST_STORAGE_KEY,
     Playlist,
@@ -35,7 +36,7 @@ def _items(*titles: str, duration: float | None = None) -> list[QueueItem]:
 
 
 async def _library(hass: HomeAssistant) -> PlaylistLibrary:
-    library = PlaylistLibrary(hass)
+    library = PlaylistLibrary(hass, ListeningHistory(hass))
     await library.async_load()
     return library
 
@@ -67,6 +68,7 @@ async def test_save_get_and_list(
             "duration": 120.0,
             "created": now,
             "updated": now,
+            "readonly": False,
         }
     ]
     data = saved.as_dict()

@@ -13,6 +13,7 @@ from pytest_homeassistant_custom_component.common import async_fire_time_changed
 
 from custom_components.media_queue import enrich, tags
 from custom_components.media_queue.const import SAVE_DELAY
+from custom_components.media_queue.history import ListeningHistory
 from custom_components.media_queue.library import PLAYLIST_STORAGE_KEY, PlaylistLibrary
 from custom_components.media_queue.manager import QueueManager
 from custom_components.media_queue.model import Mode, QueueItem
@@ -256,6 +257,6 @@ async def test_a_library_that_never_loaded_unloads(
     hass: HomeAssistant, hass_storage: dict[str, Any]
 ) -> None:
     """Unloading without a repair round (nothing loaded yet) just saves."""
-    library = PlaylistLibrary(hass)
+    library = PlaylistLibrary(hass, ListeningHistory(hass))
     await library.async_unload()
     assert hass_storage[PLAYLIST_STORAGE_KEY]["data"] == {"playlists": []}

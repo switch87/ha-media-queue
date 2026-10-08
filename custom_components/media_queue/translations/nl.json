@@ -40,6 +40,9 @@
     "playlist_exists": {
       "message": "Er bestaat al een afspeellijst \"{name}\"."
     },
+    "playlist_readonly": {
+      "message": "\"{name}\" wordt automatisch gemaakt en kan niet gewijzigd, hernoemd of verwijderd worden."
+    },
     "playlist_too_long": {
       "message": "Een afspeellijst bevat hoogstens {limit} items."
     },

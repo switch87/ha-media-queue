@@ -70,7 +70,7 @@ class QueueManager:
         # Until when a soon save (after a queue edit) is pending.
         self._soon_save_until = dt_util.utcnow()
         self.history = ListeningHistory(hass)
-        self.library = PlaylistLibrary(hass)
+        self.library = PlaylistLibrary(hass, self.history)
 
     @property
     def entity_ids(self) -> list[str]:
