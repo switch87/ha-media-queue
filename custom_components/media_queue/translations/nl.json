@@ -299,6 +299,21 @@
       "name": "Afspeellijsten ophalen",
       "description": "Geeft alle bewaarde afspeellijsten: naam, aantal items, totale duur.",
       "fields": {}
+    },
+    "get_history": {
+      "name": "Luistergeschiedenis ophalen",
+      "description": "Geeft de meest beluisterde nummers (op alle spelers) met hoe vaak ze speelden en de totalen.",
+      "fields": {
+        "limit": {
+          "name": "Aantal",
+          "description": "Hoeveel nummers (1 tot 2000)."
+        }
+      }
+    },
+    "reset_history": {
+      "name": "Luistergeschiedenis wissen",
+      "description": "Vergeet alles wat speelde; de afspeellijst \"Meest beluisterd\" verdwijnt tot er weer iets speelt.",
+      "fields": {}
     }
   }
 }

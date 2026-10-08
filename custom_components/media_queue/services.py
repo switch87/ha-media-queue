@@ -24,7 +24,7 @@ from .controller import QueueController
 from .expand import AddRequest
 from .manager import async_get_manager
 from .model import Mode, Repeat
-from .websocket import can_manage_playlists
+from .websocket import HISTORY_LIMIT, can_manage_playlists, history_result
 
 INDEX = vol.All(vol.Coerce(int), vol.Range(min=0))
 # The library allows 100 characters after trimming; this only bounds the input.
@@ -263,6 +263,23 @@ def async_register_library(hass: HomeAssistant) -> None:
         library = async_get_manager(hass).library
         library.delete(library.named(call.data["name"]).playlist_id)
 
+    async def get_history(call: ServiceCall) -> ServiceResponse:
+        return history_result(hass, call.data["limit"])
+
+    async def reset_history(call: ServiceCall) -> None:
+        await _check_manager(hass, call)
+        async_get_manager(hass).history.reset()
+
+    hass.services.async_register(
+        DOMAIN,
+        "get_history",
+        get_history,
+        schema=vol.Schema({vol.Optional("limit", default=100): HISTORY_LIMIT}),
+        supports_response=SupportsResponse.ONLY,
+    )
+    hass.services.async_register(
+        DOMAIN, "reset_history", reset_history, schema=vol.Schema({})
+    )
     hass.services.async_register(
         DOMAIN,
         "get_playlists",

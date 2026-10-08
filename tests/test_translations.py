@@ -5,7 +5,11 @@ from pathlib import Path
 import re
 from typing import Any
 
+from homeassistant.core import HomeAssistant
+from homeassistant.setup import async_setup_component
 from homeassistant.util.yaml import load_yaml_dict
+
+from custom_components.media_queue.const import DOMAIN
 
 COMPONENT = Path(__file__).parent.parent / "custom_components" / "media_queue"
 
@@ -82,3 +86,12 @@ def test_manifest_keys_in_hassfest_order() -> None:
     keys = list(_load("manifest.json"))
     assert keys[:2] == ["domain", "name"]
     assert keys[2:] == sorted(keys[2:])
+
+
+async def test_every_registered_action_is_in_services_yaml(
+    hass: HomeAssistant,
+) -> None:
+    """No action is registered without a description (hassfest needs one)."""
+    assert await async_setup_component(hass, DOMAIN, {})
+    services = load_yaml_dict(COMPONENT / "services.yaml")
+    assert set(hass.services.async_services_for_domain(DOMAIN)) == set(services)

@@ -21,6 +21,7 @@ import voluptuous as vol
 
 from .controller import QueueController
 from .expand import AddRequest
+from .history import HISTORY_MAX
 from .manager import async_get_manager
 from .model import Mode, Repeat
 
@@ -95,6 +96,8 @@ def async_register(hass: HomeAssistant) -> None:
         ws_playlists_rename,
         ws_playlists_delete,
         ws_playlists_load,
+        ws_history_list,
+        ws_history_reset,
     ):
         async_register_command(hass, command)
 
@@ -387,3 +390,43 @@ async def ws_playlists_load(
         items, Mode(msg["mode"]), context=connection.context(msg)
     )
     connection.send_result(msg["id"], result)
+
+
+# -------------------------------------------------------------------- history
+
+HISTORY_LIMIT = vol.All(vol.Coerce(int), vol.Range(min=1, max=HISTORY_MAX))
+
+
+def history_result(hass: HomeAssistant, limit: int) -> dict[str, Any]:
+    """Return the most played tracks and the totals."""
+    history = async_get_manager(hass).history
+    return {
+        "tracks": history.entries(limit),
+        "track_count": history.track_count,
+        "play_count": history.play_count,
+    }
+
+
+@websocket_command(
+    {
+        vol.Required("type"): "media_queue/history/list",
+        vol.Optional("limit", default=100): HISTORY_LIMIT,
+    }
+)
+@callback
+def ws_history_list(
+    hass: HomeAssistant, connection: Connection, msg: dict[str, Any]
+) -> None:
+    """Return the most played tracks."""
+    connection.send_result(msg["id"], history_result(hass, msg["limit"]))
+
+
+@websocket_command({vol.Required("type"): "media_queue/history/reset"})
+@callback
+def ws_history_reset(
+    hass: HomeAssistant, connection: Connection, msg: dict[str, Any]
+) -> None:
+    """Forget every play."""
+    _allow_manage(hass, connection)
+    async_get_manager(hass).history.reset()
+    connection.send_result(msg["id"])

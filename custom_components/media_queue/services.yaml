@@ -144,3 +144,16 @@ delete_playlist:
 
 get_playlists:
   fields: {}
+
+get_history:
+  fields:
+    limit:
+      default: 100
+      selector:
+        number:
+          min: 1
+          max: 2000
+          mode: box
+
+reset_history:
+  fields: {}

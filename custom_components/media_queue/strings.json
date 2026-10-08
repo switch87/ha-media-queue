@@ -299,6 +299,21 @@
       "name": "Get playlists",
       "description": "Returns every saved playlist: name, number of items, total duration.",
       "fields": {}
+    },
+    "get_history": {
+      "name": "Get listening history",
+      "description": "Returns the most played tracks (on any player) with their play counts and the totals.",
+      "fields": {
+        "limit": {
+          "name": "Limit",
+          "description": "How many tracks to return (1 to 2000)."
+        }
+      }
+    },
+    "reset_history": {
+      "name": "Reset listening history",
+      "description": "Forgets every play; the \"Most played\" playlist disappears until something is played again.",
+      "fields": {}
     }
   }
 }

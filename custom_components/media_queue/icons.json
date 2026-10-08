@@ -14,6 +14,8 @@
     "load_playlist": { "service": "mdi:playlist-play" },
     "rename_playlist": { "service": "mdi:rename" },
     "delete_playlist": { "service": "mdi:delete" },
-    "get_playlists": { "service": "mdi:playlist-music" }
+    "get_playlists": { "service": "mdi:playlist-music" },
+    "get_history": { "service": "mdi:history" },
+    "reset_history": { "service": "mdi:delete-clock" }
   }
 }
