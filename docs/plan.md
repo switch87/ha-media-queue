@@ -481,3 +481,80 @@ were missing (a playlist of about five hours showed 58 minutes).
 42. Panel: the stream row.
 43. Diagnostics, store removal, manifest 0.4.0.
 44. README, CHANGELOG, e2e on the dev HA with English screenshots.
+
+## Hang report from the Pi (handled first)
+
+The Pi agent reported "websocket ws_get hangs while a subscription is
+active" and a Muziek page that stopped responding, after it had added a
+`media_queue:` line to `configuration.yaml` (12:00) and removed it (12:30).
+
+- `ws_get`, `subscribe` and every subscriber callback are synchronous
+  `@callback`s: no awaits, no locks, no I/O. Regression tests
+  (`tests/test_concurrency.py`, real asyncio with timeouts) show `get`
+  answering with two panels subscribed, during tag reading and during
+  playlist save/load; on the dev HA 200 `get`s under that load took 0.3 ms
+  median, 1.2 ms max, and both panels kept receiving updates.
+- What did hang: the controller holds its lock across `play_media`
+  (`blocking=True`, no limit). A player that never answers kept the lock
+  forever, so next/previous/play_index/add/load on that player never
+  returned (the test failed on its 5 s timeout). Fixed with
+  `PLAY_TIMEOUT` (30 s) and the translated `play_timeout` error.
+- A subscriber that raises is now dropped (and logged) instead of failing
+  the change; players without subscribers are forgotten; diagnostics show
+  the number of open subscriptions.
+- `media_queue:` in YAML: `CONFIG_SCHEMA` is HA's
+  `config_entry_only_config_schema`, which logs "does not support YAML
+  setup" and raises a repair issue; `async_setup` runs once either way.
+  A test confirms the entry still loads once and answers; README and
+  CHANGELOG say so. The YAML line itself cannot cause a hang.
+
+## Deviations from the plan above
+
+- Repair reads each item *whose file was read* once per run, not every
+  item handed to the reader: a file missing at start-up (a share mounted
+  after HA) is tried again at the next save/load. A `TagReader.busy` flag
+  was not needed; the library runs one repair round at a time and a
+  request meanwhile adds one more round.
+- HA creates background tasks eagerly: a repair round with nothing to read
+  finishes inside `async_create_background_task`, so "is a round running"
+  is `task.done()`, not a field cleared in `finally` (that left a finished
+  task blocking every later round; found by the tests).
+- The history store has no migration function: it is new, and an
+  unreachable hook would break the 100 % rule. Malformed data is dropped at
+  load, like the other stores.
+
+## e2e 0.4.0 (dev HA 2026.9.4 on gaia, 127.0.0.1:8124, demo players)
+
+Player states were driven through the REST state API where playback had to
+be simulated (the demo players do not really play); tracks of the generated
+test library are about 31 s long.
+
+- **Playlist repair at setup**: a playlist "Saved before 0.4.0" with 11
+  items without artist, album or duration was put in the store with HA
+  stopped. At start, all 11 had title, artist and duration in memory
+  (367 s in total) and in `.storage` 5 s later.
+- **Save right after add**: Night Owls (4 files) added and saved in the same
+  second: the saved playlist had file names and no duration; 2 s later all
+  four had title, artist and duration.
+- **History**: shuffle and repeat all were on. First item played 17 s then
+  paused → counted; the next skipped after 5 s → not counted; the third
+  stopped after 17 s → counted (and the store written within seconds);
+  the first played again for 16 s → count 2. "Most played" appeared first
+  in the playlist list with these tracks; rename, delete and save-over were
+  refused with the translated message. A simulated state of other media
+  (another content id) detached the queue and counted nothing.
+- **Stream URLs** (local test server): play (replace) of an mp3 stream,
+  add of an `.m3u` (2 streams; a `file://` entry dropped), next of a
+  `.pls`, play (keep queue) of another URL — each in the right place, the
+  URL sent to the player as it is. Refused with their own messages:
+  `file://`, `media-source://`, an HTML page behind `.m3u`, an empty
+  playlist, a closed port, a server that never answers (after 10.0 s).
+  Favourite "Test radio" saved from the `.m3u` (2 streams).
+- **Panel** (Playwright, Chromium): the stream row's ▶ ⏭ ➕ and Enter add
+  and clear the field; an invalid URL shows "Enter an http:// or https://
+  address."; the HTML page shows the server's message; ➕ on "Most played"
+  added its 11 tracks; it has only ▶ ⏭ ➕ (no rename/delete).
+- Screenshots (English, 1280×800 scaled to 800×500 like the others; the
+  "Most played" counts are generated demo data): `docs/images/most-played.png`,
+  `most-played-tracks.png`, `stream-url.png`, `save-favourite.png`,
+  `phone-stream.png`.

@@ -40,6 +40,13 @@ and moves on when an item ends.
 - **Saved playlists**: save a queue as a named playlist in one library shared
   by all players, load it into any player's queue with Play, Play next or Add,
   rename and delete them.
+- **Complete playlists**: titles, artists and durations that were not read
+  yet when a queue was saved are filled in afterwards, in the background.
+- **Most played**: a listening history over all players and an automatic
+  playlist of your most played tracks (*Meest beluisterd* in Dutch).
+- **Stream URLs**: play or queue an internet radio or any http(s) stream,
+  `.m3u` and `.pls` playlists included, and keep the ones you like as
+  favourites.
 - The saved playlists also appear in **Home Assistant's own media browser**
   (Media → *Playlists (Media queue)*).
 - **Actions** for automations and scripts, and a websocket API.
@@ -49,6 +56,14 @@ and moves on when an item ends.
 | Shuffle and repeat | Saved playlists |
 |---|---|
 | ![Shuffle on, repeat whole queue](docs/images/shuffle-repeat.png) | ![The playlist library](docs/images/playlists.png) |
+
+| Most played | Its tracks |
+|---|---|
+| ![The Playlists folder with Most played first](docs/images/most-played.png) | ![The most played tracks](docs/images/most-played-tracks.png) |
+
+| A stream URL | Saving it as a favourite |
+|---|---|
+| ![The stream URL field above the library](docs/images/stream-url.png) | ![Save as favourite](docs/images/save-favourite.png) |
 
 | Save a queue as a playlist | Playlists in HA's media browser | On a phone |
 |---|---|---|
@@ -131,6 +146,54 @@ nothing to fill in; the integration can be added once. The sidebar gets a
   track plays on its own (HA's browser plays one item at a time); a whole
   playlist is loaded from the Music page or with `media_queue.load_playlist`.
 - Limits: 1000 items per playlist, 500 playlists.
+- **Missing tags are filled in.** Tags are read in the background after an
+  add, so a queue saved right away may still hold file names without artist
+  or duration. The library completes such items by itself: at start-up (also
+  for playlists saved with an earlier version), after every save and after
+  every load. Only local media files that lack an artist or a duration are
+  read, in the same small batches as the queue (cover art is never read);
+  a file that was read is not read again until the next restart.
+
+### Most played
+
+![Most played](docs/images/most-played-tracks.png)
+
+- Media queue keeps a **listening history** for all players together. A
+  track counts as played when it really played **30 seconds or half its
+  length**, whichever comes first: skipping or stopping it earlier does not
+  count, pauses do not count towards the time, and *repeat current item*
+  counts every repetition.
+- Only **real tracks** count: items with a known duration and a media id
+  that is not a plain `http(s)://` stream. Internet radio and other streams
+  never appear in the history.
+- **Most played** (*Meest beluisterd* on Dutch installations) is listed first
+  in the Playlists folder (and in HA's media browser) as soon as something
+  was played: the 100 most played tracks, by number of plays and then by
+  the last play. It is built from the history, so it is always up to date;
+  play it, add it or pick a track from it like any playlist. It cannot be
+  renamed, deleted or overwritten.
+- The history keeps the 2000 most played tracks. It is written to disk at
+  most every 5 minutes while music plays and a few seconds after a player
+  stops. Clear it with the `media_queue.reset_history` action.
+
+### Stream URLs and favourites
+
+![The stream URL field](docs/images/stream-url.png)
+
+- The field above the library takes an `http://` or `https://` address of an
+  internet radio station or any other stream: **▶** plays it (replacing the
+  queue), **⏭** plays it next, **➕** (or Enter) adds it.
+- Addresses ending in `.m3u`, `.m3u8` or `.pls` are downloaded (at most
+  256 kB, 10 seconds) and their streams are added, like local playlists.
+  Other addresses are added as they are, without being downloaded.
+- Other schemes (`file://`, `media-source://`, …) are refused. A server that
+  does not answer, an error page or an empty playlist gives a clear message
+  and adds nothing.
+- **☆ Save as favourite** keeps the address under a name. A favourite is a
+  saved playlist of its stream(s): it is listed in the Playlists folder and
+  can be played, renamed and deleted like any playlist.
+- Streams have no end, so the queue never moves on from one by itself;
+  press next.
 
 ## Actions
 
@@ -153,7 +216,10 @@ All actions are in the `media_queue` domain. Players are named by
 | `load_playlist` | `entity_id`, `name`, `mode` | Puts a saved playlist in the player's queue. |
 | `rename_playlist` | `name`, `new_name` | Renames a playlist. |
 | `delete_playlist` | `name` | Deletes a playlist. |
-| `get_playlists` | — | Returns all playlists: id, name, count, duration (response only). |
+| `get_playlists` | — | Returns all playlists: id, name, count, duration, readonly (response only). |
+| `add_url` | `entity_id`, `url`, `mode`, `title` | Adds an http(s) stream; `.m3u`/`.m3u8`/`.pls` addresses are expanded. Returns how many items were added. |
+| `get_history` | `limit` (1–2000, default 100) | Returns the most played tracks with their play counts and the totals (response only). |
+| `reset_history` | — | Forgets every play. |
 
 Playlist names in actions are matched regardless of case.
 
@@ -225,7 +291,11 @@ Used by the Music page; available to other frontends. All commands are
   `playlists/save` (`entity_id`, `name`, `overwrite`), `playlists/rename`
   (`playlist_id`, `name`), `playlists/delete` (`playlist_id`),
   `playlists/load` (`entity_id`, `playlist_id`, `mode`, optional `item_id` for
-  one track).
+  one track). Summaries carry `readonly` (true for *Most played*, id
+  `most_played`).
+- Streams: `add_url` (`entity_id`, `url`, `mode`, `title`), `streams/save`
+  (`url`, `name`, `overwrite`: saves a favourite).
+- History: `history/list` (`limit`), `history/reset`.
 
 A queue snapshot holds `items` (in play order, each with `id`, `title`,
 `artist`, `album`, `duration`, `thumbnail` when known), `current`, `next`
@@ -235,9 +305,10 @@ A queue snapshot holds `items` (in play order, each with `id`, `title`,
 `{"closed": true}` when the integration unloads.
 
 **Permissions**: reading a queue needs read access to the player; changing it
-needs control. Listing playlists is open to every user; saving and loading
-need control of the player; renaming and deleting need an administrator or a
-user who may control at least one media player.
+needs control. Listing playlists and reading the history are open to every
+user; saving, loading and adding a stream need control of the player;
+renaming and deleting playlists, saving a favourite and resetting the history
+need an administrator or a user who may control at least one media player.
 
 ## How playing works
 
@@ -263,7 +334,9 @@ Not an end, on purpose:
 
 Items that fail to play are skipped (at most 3 in a row), as are items the
 player accepts but does not start within about 25 seconds (an unreachable
-URL, an unsupported format). The Music page shows these errors.
+URL, an unsupported format). A player that does not answer a play request
+within 30 seconds counts as failed too, so a hanging speaker never blocks
+its queue. The Music page shows these errors.
 
 ### Player notes
 
@@ -299,7 +372,11 @@ Made to run on a Raspberry Pi with little memory:
   most 256 kB per file. A batch that hangs for 30 seconds (a stuck network
   share) stops tag reading for that player for 10 minutes.
 - The queues are written to disk a few seconds after a change; playback-only
-  changes much later, to spare SD cards.
+  changes much later, to spare SD cards. The listening history is written at
+  most every 5 minutes while music plays.
+- Completing the tags of saved playlists uses the same small batches as the
+  queue and pauses for 10 minutes on a hanging share, independently of the
+  queues.
 
 ## Troubleshooting
 
@@ -317,9 +394,17 @@ Made to run on a Raspberry Pi with little memory:
   cover) keep their file name.
 - **The Music page does not appear**: reload the browser after the restart;
   check that the integration is added under *Devices & services*.
+- **`media_queue:` in `configuration.yaml`**: not needed and not supported —
+  Media queue is set up from the UI only. Home Assistant ignores the line,
+  logs "does not support YAML setup" and shows a repair; remove the line.
+- **The page or a button seems to hang**: since 0.4.0 a player that does not
+  answer a play request is given up after 30 seconds (with a message), so
+  the queue stays usable. The diagnostics show how many open pages follow
+  the queues (`subscriptions`).
 - **Diagnostics**: *Devices & services → Media queue → ⋮ → Download
-  diagnostics* (queue sizes, positions, settings and playlist counts; no
-  names, the player's media URL is redacted).
+  diagnostics* (queue sizes, positions, settings, playlist and history
+  counts, open subscriptions; no names, the player's media URL is
+  redacted).
 
 ## FAQ
 
@@ -333,13 +418,15 @@ for example from automations or voice scripts.
 **Video?** The queue is made for audio. Videos inside folders are only queued
 for players that are TVs; images are skipped.
 
-**Where is my data?** In `.storage/media_queue` (queues) and
-`.storage/media_queue.playlists` (playlists) in your configuration folder.
+**Where is my data?** In `.storage/media_queue` (queues),
+`.storage/media_queue.playlists` (playlists and favourites) and
+`.storage/media_queue.history` (listening history) in your configuration
+folder.
 
 ## Uninstall
 
 *Settings → Devices & services → Media queue → Delete.* This also deletes the
-stored queues **and the saved playlists**. Then remove the integration in HACS
+stored queues, **the saved playlists and the listening history**. Then remove the integration in HACS
 (or delete `custom_components/media_queue`) and restart.
 
 ## Contributing

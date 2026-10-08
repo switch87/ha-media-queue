@@ -1,5 +1,54 @@
 # Changelog
 
+## 0.4.0 — 2026-10-08
+
+### Fixed
+
+- **A player that never answers no longer blocks its queue.** The queue
+  held its lock during the `play_media` call without a time limit; a hung
+  speaker made next/previous/play/add/load on that player wait forever and
+  the Music page seemed to hang. The call is now given up after 30 seconds
+  with a message (`play_timeout`), and automatic advancing skips the item
+  like any other failure.
+- **Saved playlists get their tags.** A queue saved right after an add kept
+  file names without artist or duration (the tags were still being read), so
+  a playlist of five hours could show 58 minutes. Missing tags of local
+  files are now read in the background: at start-up (also for playlists
+  saved with 0.3.x), after a save and after a load, with the queue's
+  batches, cover-art-skipping reader and 10-minute pause on a hanging share.
+- A subscriber that fails (a closed connection) is dropped instead of
+  breaking the queue change that notified it.
+
+### Added
+
+- **Listening history** over all players: a track counts after 30 seconds
+  or half its length (whichever comes first), never after an early skip or
+  stop; only real tracks (a duration, no bare stream URL) count. Stored in
+  `.storage/media_queue.history` (at most 2000 tracks; written at most every
+  5 minutes while playing and soon after a stop).
+- **Most played** (*Meest beluisterd* on Dutch installations): an automatic,
+  read-only playlist of the 100 most played tracks, first in the Playlists
+  folder and in HA's media browser once something was played.
+- **Stream URLs**: a field above the library to play, play next or add an
+  http(s) stream; `.m3u`, `.m3u8` and `.pls` addresses are downloaded
+  (10 s, 256 kB at most) and expanded. Other schemes are refused; timeouts,
+  error pages and empty playlists give translated messages.
+- **Favourites**: save a stream URL under a name; it is an ordinary saved
+  playlist, so it is listed, played, renamed and deleted like one.
+- Actions `media_queue.add_url`, `media_queue.get_history`,
+  `media_queue.reset_history`; websocket commands `media_queue/add_url`,
+  `media_queue/streams/save`, `media_queue/history/list`,
+  `media_queue/history/reset`. Playlist summaries carry `readonly`.
+- Diagnostics: history counts (no titles) and the number of open
+  subscriptions.
+
+### Changed
+
+- Removing the integration also deletes the listening history.
+- A `media_queue:` line in `configuration.yaml` is not supported (it never
+  was): Home Assistant ignores it, logs it and shows a repair. Tests now
+  confirm it does no harm; the README explains it.
+
 ## 0.3.1 — 2026-10-07
 
 ### Fixed
