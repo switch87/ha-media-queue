@@ -47,6 +47,7 @@ from homeassistant.util import dt as dt_util
 from .const import DOMAIN, QUEUE_LIMIT
 from .enrich import TagReader, with_tags
 from .expand import AddRequest, async_expand
+from .history import ListeningHistory, played_enough
 from .model import AddResult, Mode, Queue, QueueItem, Repeat
 from .tags import Tags, local_file
 
@@ -145,9 +146,12 @@ class QueueController:
         entity_id: str,
         on_change: Callable[[QueueController, Change], None],
         queue: Queue | None = None,
+        *,
+        history: ListeningHistory,
     ) -> None:
-        """Create the controller for entity_id."""
+        """Create the controller for entity_id; plays are counted in history."""
         self.hass = hass
+        self.history = history
         self.entity_id = entity_id
         self.queue = queue if queue is not None else Queue()
         self.phase = Phase.IDLE
@@ -170,6 +174,8 @@ class QueueController:
         # Seconds the current item has played, for players without a position.
         self._played = 0.0
         self._playing_since: datetime | None = None
+        # The current item was counted as a play (once per start).
+        self._counted = False
 
     # ------------------------------------------------------------------ setup
 
@@ -392,8 +398,9 @@ class QueueController:
         self._check(index)
         self._cancel_watchdog()
         item = self.queue.items[index]
-        self.queue.set_current(index)
         before = self.hass.states.get(self.entity_id)
+        self._count(dt_util.utcnow(), before)  # skipped or jumped away from
+        self.queue.set_current(index)
         self._before_state = before.state if before else None
         self._before_id = _content_id(before) if before else None
         self._call_started = dt_util.utcnow()
@@ -473,6 +480,7 @@ class QueueController:
                     return
             self.phase = Phase.IDLE
             self.fingerprint = None
+            self.history.flush_soon()
             self.async_changed(Change.PLAYBACK)
 
     def _following(self, repeat_current: bool) -> int | None:
@@ -550,7 +558,7 @@ class QueueController:
             self._while_playing(old, new)
         elif self.phase is Phase.STOPPED and new.state == MediaPlayerState.PLAYING:
             if self._other_media(new):
-                self._detach()
+                self._detach(old)
             else:
                 self.phase = Phase.PLAYING
                 self._playing_since = new.last_changed
@@ -559,7 +567,7 @@ class QueueController:
     def _while_playing(self, old: State | None, new: State) -> None:
         if new.state == MediaPlayerState.PLAYING:
             if self._other_media(new):
-                self._detach()
+                self._detach(old)
                 return
             if self.fingerprint is None and _content_id(new) is not None:
                 self.fingerprint = _content_id(new)
@@ -573,6 +581,7 @@ class QueueController:
         if new.state not in _STOPPED_STATES and new.state != MediaPlayerState.PAUSED:
             return  # unavailable, buffering, …: wait and see
         at = new.last_changed
+        self._count(at, old)
         if self._ended(old, at):
             self._schedule_advance(repeat_current=True)
             return
@@ -641,19 +650,44 @@ class QueueController:
         self._failures = 0
         self.phase = Phase.PLAYING
         self.fingerprint = _content_id(state)
+        self._counted = False
         self._played = 0.0
         self._playing_since = state.last_changed
         self.async_changed(Change.PLAYBACK)
 
     def _stopped(self) -> None:
         self.phase = Phase.STOPPED
+        self.history.flush_soon()
         self.async_changed(Change.PLAYBACK)
 
-    def _detach(self) -> None:
+    def _detach(self, old: State | None) -> None:
         _LOGGER.debug("%s plays something else; no longer following", self.entity_id)
+        self._count(dt_util.utcnow(), old)
+        self.history.flush_soon()
         self.phase = Phase.IDLE
         self.fingerprint = None
         self.async_changed(Change.PLAYBACK)
+
+    def _count(self, at: datetime, state: State | None) -> None:
+        """Count the current item as a play if it really played long enough.
+
+        Only while following it (playing or stopped), once per start. The
+        duration is the item's, else what the player reported (state).
+        """
+        current = self.queue.current
+        if self._counted or current is None or self.phase not in _RESTORED_PHASES:
+            return
+        played = self._played
+        if self._playing_since is not None:
+            played += max((at - self._playing_since).total_seconds(), 0.0)
+        item = self.queue.items[current]
+        if item.duration is None and state is not None:
+            reported = _number(state.attributes.get(ATTR_MEDIA_DURATION))
+            if reported is not None and reported > 0:
+                item = dataclasses.replace(item, duration=reported)
+        if played_enough(played, item.duration):
+            self._counted = True
+            self.history.record(item)
 
     # ------------------------------------------------------------ persistence
 
@@ -688,9 +722,13 @@ class QueueController:
         entity_id: str,
         data: dict[str, Any],
         on_change: Callable[[QueueController, Change], None],
+        *,
+        history: ListeningHistory,
     ) -> QueueController:
         """Return the controller stored in data."""
-        controller = cls(hass, entity_id, on_change, Queue.from_dict(data))
+        controller = cls(
+            hass, entity_id, on_change, Queue.from_dict(data), history=history
+        )
         phase = data.get("phase")
         if phase in {p.value for p in _RESTORED_PHASES}:
             controller.phase = Phase(phase)

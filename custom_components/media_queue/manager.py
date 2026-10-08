@@ -22,6 +22,7 @@ from .const import (
     STORAGE_VERSION,
 )
 from .controller import Change, Phase, QueueController, snapshot
+from .history import ListeningHistory
 from .library import PlaylistLibrary
 from .model import Queue, Repeat
 
@@ -68,6 +69,7 @@ class QueueManager:
         self._unloaded = False
         # Until when a soon save (after a queue edit) is pending.
         self._soon_save_until = dt_util.utcnow()
+        self.history = ListeningHistory(hass)
         self.library = PlaylistLibrary(hass)
 
     @property
@@ -77,6 +79,7 @@ class QueueManager:
 
     async def async_load(self) -> None:
         """Restore the stored queues."""
+        await self.history.async_load()
         await self.library.async_load()
         data = await self._store.async_load()
         queues = data.get("queues") if isinstance(data, dict) else None
@@ -85,7 +88,7 @@ class QueueManager:
         for entity_id, raw in queues.items():
             if _is_player(entity_id) and isinstance(raw, dict):
                 controller = QueueController.from_dict(
-                    self.hass, entity_id, raw, self._changed
+                    self.hass, entity_id, raw, self._changed, history=self.history
                 )
                 controller.async_start()
                 self._controllers[entity_id] = controller
@@ -102,6 +105,7 @@ class QueueManager:
         self._subscribers.clear()
         await self._store.async_save(self._data())
         await self.library.async_unload()
+        await self.history.async_unload()
 
     def get(self, entity_id: str) -> QueueController | None:
         """Return the controller of entity_id if it has one."""
@@ -111,7 +115,9 @@ class QueueManager:
         """Return the controller of entity_id, creating it."""
         if (existing := self._controllers.get(entity_id)) is not None:
             return existing
-        created = QueueController(self.hass, entity_id, self._changed)
+        created = QueueController(
+            self.hass, entity_id, self._changed, history=self.history
+        )
         created.async_start()
         self._controllers[entity_id] = created
         return created
