@@ -36,7 +36,12 @@ async def async_get_config_entry_diagnostics(
         )
     library = manager.library
     # Counts only: playlist names are the user's own words.
+    history = manager.history
     return {
         "queues": queues,
         "playlists": {"count": library.count, "items": library.item_count},
+        # Counts only: what someone listens to is personal.
+        "history": {"tracks": history.track_count, "plays": history.play_count},
+        # Open panels (and other subscribers) following a queue.
+        "subscriptions": manager.subscription_count,
     }

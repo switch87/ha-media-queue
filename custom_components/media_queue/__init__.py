@@ -10,6 +10,7 @@ from homeassistant.helpers.typing import ConfigType
 
 from . import panel, services, websocket
 from .const import DOMAIN, STORAGE_KEY, STORAGE_VERSION
+from .history import HISTORY_STORAGE_KEY, HISTORY_STORAGE_VERSION
 from .library import PLAYLIST_STORAGE_KEY, PLAYLIST_STORAGE_VERSION
 from .manager import QueueManager
 
@@ -42,8 +43,11 @@ async def async_unload_entry(hass: HomeAssistant, entry: MediaQueueConfigEntry) 
 
 
 async def async_remove_entry(hass: HomeAssistant, entry: MediaQueueConfigEntry) -> None:
-    """Delete the stored queues and playlists when the integration is removed."""
+    """Delete the stored queues, playlists and history at removal."""
     await Store[dict[str, object]](hass, STORAGE_VERSION, STORAGE_KEY).async_remove()
     await Store[dict[str, object]](
         hass, PLAYLIST_STORAGE_VERSION, PLAYLIST_STORAGE_KEY
+    ).async_remove()
+    await Store[dict[str, object]](
+        hass, HISTORY_STORAGE_VERSION, HISTORY_STORAGE_KEY
     ).async_remove()

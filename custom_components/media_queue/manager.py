@@ -107,6 +107,11 @@ class QueueManager:
         await self.library.async_unload()
         await self.history.async_unload()
 
+    @property
+    def subscription_count(self) -> int:
+        """Return the number of open subscriptions of all queues."""
+        return sum(len(entries) for entries in self._subscribers.values())
+
     def get(self, entity_id: str) -> QueueController | None:
         """Return the controller of entity_id if it has one."""
         return self._controllers.get(entity_id)

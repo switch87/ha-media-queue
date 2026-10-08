@@ -1,5 +1,7 @@
 """Tests for the diagnostics."""
 
+import dataclasses
+
 from homeassistant.core import HomeAssistant
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 from pytest_homeassistant_custom_component.components.diagnostics import (
@@ -30,6 +32,10 @@ async def test_diagnostics(
     controller.set_repeat(Repeat.ALL)
     entry.runtime_data.controller("media_player.kitchen")
     entry.runtime_data.library.save("Private name", [track("a")], overwrite=False)
+    played = dataclasses.replace(track("a"), duration=100.0)
+    entry.runtime_data.history.record(played)
+    entry.runtime_data.history.record(played)
+    entry.runtime_data.subscribe(PLAYER, lambda data: None)
 
     diagnostics = await get_diagnostics_for_config_entry(hass, hass_client, entry)
 
@@ -55,4 +61,6 @@ async def test_diagnostics(
             },
         },
         "playlists": {"count": 1, "items": 1},
+        "history": {"tracks": 1, "plays": 2},
+        "subscriptions": 1,
     }

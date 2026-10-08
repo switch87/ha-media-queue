@@ -1,6 +1,7 @@
 """Tests for the config flow, setup, unload and the panel."""
 
 import asyncio
+import dataclasses
 from typing import Any
 
 from homeassistant.components.frontend import DATA_PANELS
@@ -17,6 +18,7 @@ from pytest_homeassistant_custom_component.typing import (
 )
 
 from custom_components.media_queue.const import DOMAIN, STORAGE_KEY
+from custom_components.media_queue.history import HISTORY_STORAGE_KEY
 from custom_components.media_queue.library import PLAYLIST_STORAGE_KEY
 from custom_components.media_queue.manager import QueueManager
 from custom_components.media_queue.model import Mode
@@ -124,10 +126,12 @@ async def test_removing_the_entry_deletes_the_queues(
     controller.queue.add([track("a")], Mode.ADD, limit=10)
     controller.async_changed()
     entry.runtime_data.library.save("Mix", [track("a")], overwrite=False)
+    entry.runtime_data.history.record(dataclasses.replace(track("a"), duration=9.0))
     assert await hass.config_entries.async_remove(entry.entry_id)
     await hass.async_block_till_done()
     assert STORAGE_KEY not in hass_storage
     assert PLAYLIST_STORAGE_KEY not in hass_storage
+    assert HISTORY_STORAGE_KEY not in hass_storage
 
 
 async def test_a_yaml_line_is_ignored_with_a_clear_message(
