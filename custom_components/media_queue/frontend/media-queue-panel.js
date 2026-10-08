@@ -19,6 +19,7 @@ import {
   withPlaylistsFolder,
 } from "./lib/playlists.js";
 import { rememberPlayer, restorePlayer } from "./lib/player-memory.js";
+import { addUrlMessage, cleanUrl, saveStreamMessage, suggestName } from "./lib/streams.js";
 import { listPlayers, playersKey } from "./lib/players.js";
 import { limiter } from "./lib/limiter.js";
 import { applyUpdate, errorText, idsKey, newError, queueRows, rowTitle } from "./lib/queue-view.js";
@@ -95,6 +96,10 @@ const STYLE = `
   li.dragging { opacity: 0.5; }
   .handle { cursor: grab; touch-action: none; color: var(--secondary-text-color); }
   .actions { display: flex; flex: none; }
+  .stream { display: flex; align-items: center; gap: 2px; padding: 6px 8px; border-bottom: 1px solid var(--divider-color); }
+  .stream[hidden] { display: none; }
+  .stream input { flex: 1; min-width: 0; font: inherit; padding: 6px 8px; border-radius: 6px;
+    border: 1px solid var(--divider-color); background: var(--primary-background-color); color: inherit; }
   .empty, .note { padding: 16px; color: var(--secondary-text-color); }
   .note { padding: 8px 12px; font-size: 0.9em; border-bottom: 1px solid var(--divider-color); }
   .toast { position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%); max-width: 90vw; padding: 10px 16px;
@@ -228,6 +233,7 @@ class MediaQueuePanel extends HTMLElement {
     this._libraryHead = h("div", { class: "head" });
     this._libraryNote = h("div", { class: "note", hidden: true }, this.t("cannot_browse"));
     this._libraryList = h("ul");
+    this._buildStreamRow();
     this._queueCount = h("span", { class: "count" });
     this._clearButton = h(
       "button",
@@ -267,7 +273,7 @@ class MediaQueuePanel extends HTMLElement {
       h(
         "div",
         { class: "columns" },
-        h("section", { class: "library" }, this._libraryHead, this._libraryNote, this._libraryList),
+        h("section", { class: "library" }, this._libraryHead, this._streamRow, this._libraryNote, this._libraryList),
         h(
           "section",
           { class: "queue" },
@@ -431,6 +437,7 @@ class MediaQueuePanel extends HTMLElement {
       : !player.canBrowse
         ? "cannot_browse"
         : sourceNote(this._hass?.entities?.[player.entityId], node);
+    this._streamRow.hidden = !player;
     this._libraryNote.hidden = !note;
     this._libraryNote.textContent = note ? this.t(note) : "";
     const title = listing && listing !== "loading" ? listing.title : this.t("library");
@@ -504,9 +511,22 @@ class MediaQueuePanel extends HTMLElement {
 
   // -------------------------------------------------------------- playlists
 
-  async _savePlaylist() {
-    const opener = this._saveButton;
-    const name = await this._dialog({ title: this.t("save_playlist"), input: "", confirm: this.t("save"), opener });
+  _savePlaylist() {
+    return this._saveNamed({
+      title: this.t("save_playlist"),
+      label: this.t("playlist_name"),
+      suggestion: "",
+      opener: this._saveButton,
+      message: (name, overwrite) => saveMessage(this._entityId, name, overwrite),
+    });
+  }
+
+  /**
+   * Ask a name and save something under it (a queue, a favourite), asking
+   * before an existing playlist of that name is overwritten.
+   */
+  async _saveNamed({ title, label, suggestion, opener, message }) {
+    const name = await this._dialog({ title, input: suggestion, label, confirm: this.t("save"), opener });
     if (name === null) return;
     // Ask before overwriting; the server checks again (and is the judge).
     let taken = null;
@@ -517,7 +537,7 @@ class MediaQueuePanel extends HTMLElement {
     }
     if (taken) {
       const sure = await this._dialog({
-        title: this.t("save_playlist"),
+        title,
         text: this.t("overwrite_question", { name: taken.name }),
         confirm: this.t("overwrite"),
         opener,
@@ -526,7 +546,7 @@ class MediaQueuePanel extends HTMLElement {
     }
     for (const overwrite of taken ? [true] : [false, true]) {
       try {
-        await this._hass.callWS(saveMessage(this._entityId, name, overwrite));
+        await this._hass.callWS(message(name, overwrite));
         this._notify(this.t("saved", { name }));
         this._refreshPlaylists();
         return;
@@ -536,7 +556,7 @@ class MediaQueuePanel extends HTMLElement {
           return;
         }
         const sure = await this._dialog({
-          title: this.t("save_playlist"),
+          title,
           text: this.t("overwrite_question", { name }),
           confirm: this.t("overwrite"),
           opener,
@@ -544,6 +564,66 @@ class MediaQueuePanel extends HTMLElement {
         if (sure === null) return;
       }
     }
+  }
+
+  // ---------------------------------------------------------------- streams
+
+  _buildStreamRow() {
+    this._streamInput = h("input", {
+      type: "url",
+      inputMode: "url",
+      autocomplete: "off",
+      placeholder: this.t("stream_placeholder"),
+      "aria-label": this.t("stream_url"),
+    });
+    const button = (iconName, label, onclick) =>
+      h("button", { type: "button", title: label, "aria-label": `${label}: ${this.t("stream_url")}`, onclick }, icon(iconName));
+    this._streamSave = button("mdi:star-plus-outline", this.t("save_favourite"), () => this._saveStream());
+    this._streamRow = h(
+      "form",
+      { class: "stream", hidden: true, onsubmit: (e) => (e.preventDefault(), this._addStream("add")) },
+      icon("mdi:radio"),
+      this._streamInput,
+      button("mdi:play", this.t("play"), () => this._addStream("replace")),
+      button("mdi:skip-next", this.t("play_next"), () => this._addStream("next")),
+      button("mdi:playlist-plus", this.t("add"), () => this._addStream("add")),
+      this._streamSave,
+    );
+  }
+
+  _streamUrl() {
+    const url = cleanUrl(this._streamInput.value);
+    if (url === null) {
+      this._notify(this.t("invalid_url"));
+      this._streamInput.focus();
+    }
+    return url;
+  }
+
+  async _addStream(mode) {
+    const url = this._streamUrl();
+    if (url === null) return;
+    try {
+      const result = await this._hass.callWS(addUrlMessage(this._entityId, url, mode));
+      this._streamInput.value = "";
+      this._notify(
+        result.truncated ? this.t("truncated", { limit: result.limit }) : this.t("added", { count: result.added }),
+      );
+    } catch (err) {
+      this._notify(this.t("error", { message: err.message ?? err.code }));
+    }
+  }
+
+  _saveStream() {
+    const url = this._streamUrl();
+    if (url === null) return;
+    return this._saveNamed({
+      title: this.t("save_favourite"),
+      label: this.t("favourite_name"),
+      suggestion: suggestName(url),
+      opener: this._streamSave,
+      message: (name, overwrite) => saveStreamMessage(url, name, overwrite),
+    });
   }
 
   async _renamePlaylist(node, opener) {
@@ -580,11 +660,13 @@ class MediaQueuePanel extends HTMLElement {
    * dialog, "" for a confirmation, null when cancelled. Escape cancels; the
    * focus returns to the opener.
    */
-  _dialog({ title, text = null, input = null, confirm, opener }) {
+  _dialog({ title, text = null, input = null, label = null, confirm, opener }) {
     return new Promise((resolve) => {
       const titleId = "media-queue-dialog-title";
       const field =
-        input === null ? null : h("input", { type: "text", value: input, maxLength: 100, "aria-label": this.t("playlist_name") });
+        input === null
+          ? null
+          : h("input", { type: "text", value: input, maxLength: 100, "aria-label": label ?? this.t("playlist_name") });
       const message = h("p", { hidden: !text }, text ?? "");
       const close = (value) => {
         backdrop.remove();
