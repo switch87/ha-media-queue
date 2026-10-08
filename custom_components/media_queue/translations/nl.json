@@ -31,6 +31,9 @@
     "nothing_to_add": {
       "message": "\"{item}\" bevat niets dat afgespeeld kan worden."
     },
+    "play_timeout": {
+      "message": "De speler antwoordde niet binnen {seconds} seconden op de vraag om \"{title}\" af te spelen."
+    },
     "playlist_empty": {
       "message": "Een lege wachtrij kan niet als afspeellijst bewaard worden."
     },

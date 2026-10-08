@@ -31,6 +31,9 @@
     "nothing_to_add": {
       "message": "\"{item}\" contains nothing that can be played."
     },
+    "play_timeout": {
+      "message": "The player did not answer within {seconds} seconds when asked to play \"{title}\"."
+    },
     "playlist_empty": {
       "message": "An empty queue cannot be saved as a playlist."
     },

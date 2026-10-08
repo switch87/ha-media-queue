@@ -70,3 +70,11 @@ test("labels of the playlist library", () => {
   assert.equal(translate("nl", "playlists"), "Afspeellijsten");
   assert.equal(translate("en", "overwrite_question", { name: "Mix" }), "A playlist called “Mix” already exists. Overwrite it?");
 });
+
+test("every error kind the queue reports has a label", () => {
+  for (const kind of ["cannot_play", "did_not_start", "play_timeout"]) {
+    for (const language of ["en", "nl"]) {
+      assert.ok(STRINGS[language][`error_${kind}`], `${language}: error_${kind}`);
+    }
+  }
+});

@@ -69,6 +69,9 @@ TAG_TIMEOUT = 30
 TAG_PAUSE = timedelta(minutes=10)
 # Seconds a player may take to start an item before it counts as failed.
 STARTING_TIMEOUT = 25
+# Seconds a play_media call may take: the queue lock is held meanwhile, so a
+# player that never answers would block every command on its queue.
+PLAY_TIMEOUT = 30
 
 # "standby" is deprecated in HA but still reported by older integrations.
 _STOPPED_STATES = {
@@ -437,7 +440,19 @@ class QueueController:
         self.fingerprint = None
         self.async_changed(Change.CURRENT)
         try:
-            await self._play_media(item, context)
+            async with asyncio.timeout(PLAY_TIMEOUT):
+                await self._play_media(item, context)
+        except TimeoutError as err:
+            self.phase = Phase.IDLE
+            self._error("play_timeout", item, "")
+            raise HomeAssistantError(
+                translation_domain=DOMAIN,
+                translation_key="play_timeout",
+                translation_placeholders={
+                    "title": item.title,
+                    "seconds": str(PLAY_TIMEOUT),
+                },
+            ) from err
         except Exception as err:  # players raise their own errors (MPD)
             self.phase = Phase.IDLE
             self._error("cannot_play", item, str(err))
